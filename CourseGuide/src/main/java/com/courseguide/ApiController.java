@@ -106,8 +106,9 @@ public class ApiController {
         System.out.println("---- End Student Info ----");
     }
     
-    //generate a sentense for AI
-    public static void sentenseGeneration(Map<String, Object> info) {
+    // generate a sentence for student info
+    // Here will have a method called Sentence Generator which will generate sentences based on user input stored in studentInfo
+    public static void sentenceGeneration(Map<String, Object> info) {
         System.out.println("---- Generated Sentence ----");
         String graduationYear = "Unknown";
         String major = "Unknown";
@@ -128,12 +129,6 @@ public class ApiController {
         System.out.println(sentence);
         System.out.println("---- End Generated Sentence ----");
     }
-    
-    // Here will have a method called Sentence Generator which will generate sentences based on user input stored in studentInfo
-    // Not my job
-
-    // Debug function for Sentence Generator output
-    // Not my job
 
     // Function to generate PDF snapshot of a given URL
     @GetMapping(value = "/snapshot/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
