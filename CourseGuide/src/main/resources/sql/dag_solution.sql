@@ -1,22 +1,19 @@
--- Complete MySQL Setup for DAG Generation
--- Pure MySQL solution for course prerequisite DAG edge list generation
+-- MySQL DAG Solution for Course Prerequisites
+-- Input: CSV format - CourseName,PreqCourseName,CreditHours,Category,Description
+-- Output: Pipe-separated format - DependentClass|PrerequisiteClass|Flag
 
 -- Create database
 CREATE DATABASE IF NOT EXISTS courseguide_dag;
 USE courseguide_dag;
 
--- Drop existing objects if they exist
+-- Drop existing objects
 DROP FUNCTION IF EXISTS get_dag_edge_list;
 DROP PROCEDURE IF EXISTS clear_all_data;
-DROP PROCEDURE IF EXISTS insert_course_if_not_exists;
-DROP PROCEDURE IF EXISTS insert_prerequisite;
-DROP PROCEDURE IF EXISTS analyze_dependency_flags;
 DROP PROCEDURE IF EXISTS process_csv_data;
-DROP PROCEDURE IF EXISTS process_csv_to_dag;
-DROP PROCEDURE IF EXISTS generate_complete_dag;
-DROP PROCEDURE IF EXISTS generate_dag_report;
-DROP PROCEDURE IF EXISTS get_dag_statistics;
+DROP PROCEDURE IF EXISTS analyze_dependency_flags;
+DROP PROCEDURE IF EXISTS get_dag_output;
 DROP PROCEDURE IF EXISTS load_csv_from_file;
+DROP PROCEDURE IF EXISTS export_dag_to_file;
 DROP VIEW IF EXISTS dag_edges;
 DROP TABLE IF EXISTS prerequisites;
 DROP TABLE IF EXISTS courses;
@@ -48,7 +45,7 @@ CREATE TABLE prerequisites (
     UNIQUE KEY unique_prerequisite (dependent_course_id, prerequisite_course_id)
 );
 
--- Create view
+-- Create view for DAG edges
 CREATE VIEW dag_edges AS
 SELECT 
     dc.course_name AS dependent_class,
@@ -59,7 +56,7 @@ JOIN courses dc ON p.dependent_course_id = dc.id
 JOIN courses pc ON p.prerequisite_course_id = pc.id
 ORDER BY dc.course_name, p.dependency_flag, pc.course_name;
 
--- Create function
+-- Create function to get DAG edge list
 DELIMITER //
 CREATE FUNCTION get_dag_edge_list() 
 RETURNS TEXT
@@ -99,7 +96,7 @@ BEGIN
 END//
 DELIMITER ;
 
--- Create procedures
+-- Procedure to clear all data
 DELIMITER //
 CREATE PROCEDURE clear_all_data()
 BEGIN
@@ -110,33 +107,7 @@ BEGIN
 END//
 DELIMITER ;
 
-DELIMITER //
-CREATE PROCEDURE insert_course_if_not_exists(
-    IN p_course_name VARCHAR(100),
-    IN p_credit_hours INT,
-    IN p_category VARCHAR(20),
-    IN p_description TEXT
-)
-BEGIN
-    INSERT IGNORE INTO courses (course_name, credit_hours, category, description)
-    VALUES (p_course_name, p_credit_hours, p_category, p_description);
-END//
-DELIMITER ;
-
-DELIMITER //
-CREATE PROCEDURE insert_prerequisite(
-    IN p_dependent_course VARCHAR(100),
-    IN p_prerequisite_course VARCHAR(100),
-    IN p_dependency_flag TINYINT
-)
-BEGIN
-    INSERT INTO prerequisites (dependent_course_id, prerequisite_course_id, dependency_flag)
-    SELECT dc.id, pc.id, p_dependency_flag
-    FROM courses dc, courses pc 
-    WHERE dc.course_name = p_dependent_course AND pc.course_name = p_prerequisite_course;
-END//
-DELIMITER ;
-
+-- Procedure to analyze dependency flags (generic logic)
 DELIMITER //
 CREATE PROCEDURE analyze_dependency_flags(
     IN p_dependent_course VARCHAR(100)
@@ -231,78 +202,9 @@ BEGIN
 END//
 DELIMITER ;
 
+-- Procedure to process CSV data
 DELIMITER //
-CREATE PROCEDURE generate_dag_report()
-BEGIN
-    SELECT 
-        'DAG Edge List Report (MySQL)' as report_title,
-        '===========================' as separator,
-        '' as empty_line,
-        CONCAT(dc.course_name, '|', pc.course_name, '|', p.dependency_flag) AS dag_edge,
-        CASE 
-            WHEN p.dependency_flag = 0 THEN 'AND requirement'
-            WHEN p.dependency_flag = 1 THEN 'OR group requirement'
-        END as requirement_type
-    FROM prerequisites p
-    JOIN courses dc ON p.dependent_course_id = dc.id
-    JOIN courses pc ON p.prerequisite_course_id = pc.id
-    ORDER BY dc.course_name, p.dependency_flag, pc.course_name;
-END//
-DELIMITER ;
-
-DELIMITER //
-CREATE PROCEDURE get_dag_statistics()
-BEGIN
-    SELECT 
-        'DAG Statistics' as title,
-        COUNT(*) as total_edges,
-        SUM(CASE WHEN p.dependency_flag = 0 THEN 1 ELSE 0 END) as and_requirements,
-        SUM(CASE WHEN p.dependency_flag = 1 THEN 1 ELSE 0 END) as or_requirements,
-        COUNT(DISTINCT dc.course_name) as dependent_courses,
-        COUNT(DISTINCT pc.course_name) as prerequisite_courses
-    FROM prerequisites p
-    JOIN courses dc ON p.dependent_course_id = dc.id
-    JOIN courses pc ON p.prerequisite_course_id = pc.id;
-END//
-DELIMITER ;
-
--- Procedure to load sample data for demonstration
-DELIMITER //
-CREATE PROCEDURE load_sample_data()
-BEGIN
-    -- Clear temporary table
-    DROP TEMPORARY TABLE IF EXISTS temp_simple_csv;
-    
-    -- Create temporary table for simple CSV data
-    CREATE TEMPORARY TABLE temp_simple_csv (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        course_name VARCHAR(100),
-        prereq_course_name VARCHAR(100),
-        credit_hours INT,
-        category VARCHAR(20),
-        description TEXT
-    );
-    
-    -- Insert sample data (this is just for demonstration)
-    INSERT INTO temp_simple_csv (course_name, prereq_course_name, credit_hours, category, description) VALUES
-    ('Math1151', 'Math1150', 5, 'M1', 'Calculus II'),
-    ('Math1151', 'Math1148', 5, 'M1', 'Calculus II'),
-    ('CS201', 'CS101', 3, 'M1', 'Data Structures'),
-    ('CS201', 'Math1151', 3, 'M1', 'Data Structures'),
-    ('CS301', 'CS201', 4, 'M1', 'Advanced Algorithms'),
-    ('CS301', 'Math2000', 4, 'M1', 'Advanced Algorithms'),
-    ('ENG400', 'ENG200', 3, 'M1', 'Advanced Writing'),
-    ('ENG400', 'ENG300', 3, 'M1', 'Advanced Writing');
-    
-    -- Process the data
-    CALL process_simple_csv_data();
-    
-END//
-DELIMITER ;
-
--- Simple CSV processor for the specified format
-DELIMITER //
-CREATE PROCEDURE process_simple_csv_data()
+CREATE PROCEDURE process_csv_data()
 BEGIN
     DECLARE done INT DEFAULT FALSE;
     DECLARE v_course_name VARCHAR(100);
@@ -314,7 +216,7 @@ BEGIN
     -- Cursor for processing CSV data
     DECLARE csv_cursor CURSOR FOR
         SELECT DISTINCT course_name, prereq_course_name, credit_hours, category, description
-        FROM temp_simple_csv
+        FROM temp_csv_data
         WHERE course_name IS NOT NULL AND prereq_course_name IS NOT NULL AND prereq_course_name != '';
     
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
@@ -325,13 +227,13 @@ BEGIN
     -- Insert all unique courses first
     INSERT IGNORE INTO courses (course_name, credit_hours, category, description)
     SELECT DISTINCT course_name, credit_hours, category, description
-    FROM temp_simple_csv
+    FROM temp_csv_data
     WHERE course_name IS NOT NULL;
     
     -- Insert prerequisite courses (use default values for missing data)
     INSERT IGNORE INTO courses (course_name, credit_hours, category, description)
     SELECT DISTINCT prereq_course_name, 3, 'Major1', 'Prerequisite course'
-    FROM temp_simple_csv
+    FROM temp_csv_data
     WHERE prereq_course_name IS NOT NULL AND prereq_course_name != '';
     
     -- Process prerequisites
@@ -355,7 +257,7 @@ BEGIN
     -- Analyze dependency flags for each dependent course
     DECLARE course_cursor CURSOR FOR
         SELECT DISTINCT course_name
-        FROM temp_simple_csv
+        FROM temp_csv_data
         WHERE course_name IS NOT NULL;
     
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = FALSE;
@@ -378,7 +280,7 @@ DELIMITER ;
 
 -- Procedure to get DAG output in pipe-separated format
 DELIMITER //
-CREATE PROCEDURE get_dag_pipe_format()
+CREATE PROCEDURE get_dag_output()
 BEGIN
     SELECT 
         CONCAT(dc.course_name, '|', pc.course_name, '|', p.dependency_flag) AS dag_edge
@@ -389,12 +291,83 @@ BEGIN
 END//
 DELIMITER ;
 
+-- Procedure to load CSV from file
+DELIMITER //
+CREATE PROCEDURE load_csv_from_file(IN file_path VARCHAR(500))
+BEGIN
+    -- Clear temporary table
+    DELETE FROM temp_csv_data;
+    
+    -- Load CSV data
+    SET @sql = CONCAT('
+        LOAD DATA INFILE ''', file_path, '''
+        INTO TABLE temp_csv_data
+        FIELDS TERMINATED BY '',''
+        LINES TERMINATED BY ''\n''
+        IGNORE 1 ROWS
+        (course_name, prereq_course_name, credit_hours, category, description)
+    ');
+    
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+    
+    -- Process the loaded data
+    CALL process_csv_data();
+END//
+DELIMITER ;
+
+-- Procedure to export DAG to file
+DELIMITER //
+CREATE PROCEDURE export_dag_to_file(IN output_file VARCHAR(500))
+BEGIN
+    SET @sql = CONCAT('
+        SELECT CONCAT(dc.course_name, ''|'', pc.course_name, ''|'', p.dependency_flag) AS dag_edge
+        FROM prerequisites p
+        JOIN courses dc ON p.dependent_course_id = dc.id
+        JOIN courses pc ON p.prerequisite_course_id = pc.id
+        ORDER BY dc.course_name, p.dependency_flag, pc.course_name
+        INTO OUTFILE ''', output_file, '''
+        FIELDS TERMINATED BY ''''
+        LINES TERMINATED BY ''\n''
+    ');
+    
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+END//
+DELIMITER ;
+
+-- Create temporary table for CSV data
+CREATE TEMPORARY TABLE IF NOT EXISTS temp_csv_data (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    course_name VARCHAR(100),
+    prereq_course_name VARCHAR(100),
+    credit_hours INT,
+    category VARCHAR(20),
+    description TEXT
+);
+
 -- Load sample data and generate DAG
-CALL load_sample_data();
+DELETE FROM temp_csv_data;
+
+-- Insert sample data in the format: CourseName,PreqCourseName,CreditHours,Category,Description
+INSERT INTO temp_csv_data (course_name, prereq_course_name, credit_hours, category, description) VALUES
+('Math 2255', 'Math 2153', 3, 'Major1', 'Single AND requirement'),
+('Math 3607', 'Math 2255', 3, 'Major1', 'Advanced Calculus'),
+('Math 3607', 'Math 2568', 3, 'Major1', 'Linear Algebra'),
+('Stat 4202', 'Math 4530', 3, 'Major1', 'Statistics'),
+('Stat 4202', 'Stat 4201', 3, 'Major1', 'Intro Statistics'),
+('BusFin 3220', 'ACCTMIS 2000', 3, 'Major1', 'Financial Management'),
+('BusFin 3220', 'ACCTMIS 2200', 3, 'Major1', 'Accounting Principles'),
+('BusFin 3220', 'ACCTMIS 2300', 3, 'Major1', 'Managerial Accounting'),
+('Math 3589', 'Math 3345', 3, 'Major1', 'Mixed requirements - AND part'),
+('Math 3589', 'Math 4530', 3, 'Major1', 'Mixed requirements - OR part'),
+('Math 3589', 'Stat 4201', 3, 'Major1', 'Mixed requirements - OR part');
+
+-- Process the data
+CALL process_csv_data();
 
 -- Display final results in pipe-separated format
 SELECT '=== DAG EDGE LIST (PIPE-SEPARATED FORMAT) ===' as title;
-CALL get_dag_pipe_format();
-
--- Show statistics
-CALL get_dag_statistics();
+CALL get_dag_output();
