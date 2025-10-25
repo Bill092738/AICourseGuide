@@ -1,0 +1,105 @@
+:root {
+  --bg: #f9fafb;
+  --fg: #111827;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-600: #1d4ed8;
+}
+
+* { box-sizing: border-box; }
+body, html, #root { height: 100%; margin: 0; }
+
+.page { background: var(--bg); color: var(--fg); min-height: 100%; }
+.container { max-width: 720px; margin: 0 auto; padding: 24px; }
+
+.h1 { font-size: 1.875rem; font-weight: 700; margin: 0 0 4px; }
+.h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 12px; }
+.mb8 { margin-bottom: 32px; }
+.mb2 { margin-bottom: 8px; }
+.mt6 { margin-top: 24px; }
+.muted { color: var(--muted); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 0.9rem; margin-bottom: 6px; }
+.field input, .field select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 6px; background: #fff; font-size: 0.95rem;
+}
+
+/* Let Tailwind control the file button look (remove default text-field chrome) */
+.field input[type="file"] {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  width: auto; /* so the button sizes naturally */
+}
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+}
+.fieldset legend { font-size: 0.9rem; padding: 0 6px; }
+
+.actions { display: flex; gap: 12px; padding-top: 8px; align-items: center; }
+.actions button {
+  background: var(--primary);
+  color: #fff; border: none; padding: 8px 14px; border-radius: 6px;
+  cursor: pointer;
+}
+.actions button:hover { background: var(--primary-600); }
+.actions a { color: var(--primary); text-decoration: underline; }
+
+.status { font-size: 0.9rem; color: var(--muted); margin-top: 8px; }
+
+.list { margin: 0; padding-left: 20px; }
+.list li { margin: 4px 0; }
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}

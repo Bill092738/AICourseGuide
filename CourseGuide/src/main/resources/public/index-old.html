@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CourseGuide</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900">
+  <div class="max-w-2xl mx-auto p-6">
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold">CourseGuide</h1>
+      <p class="text-gray-600">Get simple recommendations based on your profile and goals.</p>
+    </header>
+
+    <!-- User basic info -->
+    <section class="bg-white shadow rounded p-6 space-y-4">
+      <h2 class="text-xl font-semibold">User basic info</h2>
+      <div>
+        <label for="university" class="block text-sm font-medium mb-1">University</label>
+        <input id="university" type="text" placeholder='e.g., "The Ohio State University"' class="w-full border rounded px-3 py-2" />
+      </div>
+      <div>
+        <label for="major" class="block text-sm font-medium mb-1">Major</label>
+        <input id="major" type="text" placeholder="e.g., Computer Science" class="w-full border rounded px-3 py-2" />
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="degreeLevel" class="block text-sm font-medium mb-1">Degree level</label>
+          <select id="degreeLevel" class="w-full border rounded px-3 py-2">
+            <option value="" disabled selected>Select</option>
+            <option value="Undergraduate">Undergraduate</option>
+            <option value="Graduate">Graduate</option>
+          </select>
+        </div>
+        <div>
+          <label for="graduationYear" class="block text-sm font-medium mb-1">Graduation year</label>
+          <input id="graduationYear" type="number" min="1900" max="2100" placeholder="e.g., 2027" class="w-full border rounded px-3 py-2" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Current progress -->
+    <section class="bg-white shadow rounded p-6 space-y-3 mt-6">
+      <h2 class="text-xl font-semibold">Current progress</h2>
+      <p class="text-sm text-gray-600">
+        Upload a single PDF that includes: current courses, completed courses, and any transfer credits.
+      </p>
+      <div>
+        <label for="progressPdf" class="block text-sm font-medium mb-1">Progress PDF</label>
+        <input id="progressPdf" type="file" accept="application/pdf" class="w-full border rounded px-3 py-2 bg-white" />
+      </div>
+    </section>
+
+    <!-- Target or goal -->
+    <section class="bg-white shadow rounded p-6 space-y-4 mt-6">
+      <h2 class="text-xl font-semibold">Target or goal</h2>
+      <div>
+        <label for="targetMajor" class="block text-sm font-medium mb-1">Target major</label>
+        <input id="targetMajor" type="text" placeholder="e.g., Computer & Information Science" class="w-full border rounded px-3 py-2" />
+      </div>
+      <div>
+        <label for="targetMinor" class="block text-sm font-medium mb-1">Target minor (optional)</label>
+        <input id="targetMinor" type="text" placeholder="e.g., Mathematics" class="w-full border rounded px-3 py-2" />
+      </div>
+      <div>
+        <label for="planName" class="block text-sm font-medium mb-1">Plan name</label>
+        <input id="planName" type="text" placeholder='e.g., "BS CIS 2023-2024"' class="w-full border rounded px-3 py-2" />
+      </div>
+      <div>
+        <label for="preferredElectives" class="block text-sm font-medium mb-1">Preferred electives (comma-separated)</label>
+        <input id="preferredElectives" type="text" placeholder='e.g., AI, Data Science, Systems' class="w-full border rounded px-3 py-2" />
+      </div>
+
+      <fieldset class="border rounded p-4">
+        <legend class="text-sm font-medium px-1">Constraints</legend>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="maxCreditHour" class="block text-sm font-medium mb-1">Max credit hours</label>
+            <input id="maxCreditHour" type="number" min="1" max="30" placeholder="e.g., 18" class="w-full border rounded px-3 py-2" />
+          </div>
+          <div>
+            <label for="semester" class="block text-sm font-medium mb-1">Semester</label>
+            <input id="semester" type="text" placeholder='e.g., "Spring 2026"' class="w-full border rounded px-3 py-2" />
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="flex gap-3 pt-2">
+        <button id="submitBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Get Recommendations</button>
+        <a href="/api/health" target="_blank" class="text-blue-600 underline">Health</a>
+      </div>
+    </section>
+
+    <section class="mt-6">
+      <h2 class="text-xl font-semibold mb-2">Recommendations</h2>
+      <ul id="results" class="list-disc pl-6 space-y-1 text-gray-800"></ul>
+    </section>
+  </div>
+
+  <script src="/public/app.js"></script>
+</body>
+</html>

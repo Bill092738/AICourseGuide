@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CourseGuide</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Optional config
+      tailwind.config = {
+        darkMode: 'class',
+        theme: { extend: {} },
+        // If you build class names dynamically, add them here so the CDN generates them:
+        // safelist: ['bg-blue-600','hover:bg-blue-700','text-white'],
+        // To avoid Tailwind base reset conflicts with your existing CSS, you can disable preflight:
+        // corePlugins: { preflight: false },
+      }
+    </script>
+  </head>
+  <body class="bg-gray-50 min-h-screen text-gray-900">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
