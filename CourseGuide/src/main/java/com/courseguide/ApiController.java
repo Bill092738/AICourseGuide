@@ -22,20 +22,28 @@ public class ApiController {
     @Autowired
     private FileStorageService storage;
 
+    // Public student info object for storing received data
+    public static Map<String, Object> studentInfo = new HashMap<>();
+
     @GetMapping("/health")
     public Map<String, String> health() {
         return Map.of("status", "ok");
     }
 
-    // Legacy/simple JSON endpoint preserved
+    // Updated: Receive all user info and store in public studentInfo object
     @PostMapping("/recommendations")
     public Map<String, List<String>> recommendations(@RequestBody Map<String, Object> body) {
-        String major = (String) body.getOrDefault("major", "");
-        double gpa = 0.0;
-        try { gpa = Double.parseDouble(body.getOrDefault("gpa", "0").toString()); } catch (Exception ignore) {}
+        // Store all received fields in the public studentInfo object
+        studentInfo.clear();
+        for (Map.Entry<String, Object> entry : body.entrySet()) {
+            studentInfo.put(entry.getKey(), entry.getValue() == null ? "" : entry.getValue().toString());
+        }
 
-        List<String> recs = engine.generateRecommendations(major, gpa);
-        return Map.of("recommendations", recs);
+        // Call debug function to print all info
+        printStudentInfo(studentInfo);
+
+        // Placeholder: return empty recommendations for now
+        return Map.of("recommendations", List.of());
     }
 
     // New: upload a single PDF and temp-store it; returns an ID to reference later
@@ -77,5 +85,14 @@ public class ApiController {
 
         List<String> recs = engine.generateRecommendations(major, gpa);
         return Map.of("recommendations", recs);
+    }
+
+    // Debug function to print all info in a given HashMap
+    public static void printStudentInfo(Map<String, Object> info) {
+        System.out.println("---- Debug: Student Info ----");
+        for (Map.Entry<String, Object> entry : info.entrySet()) {
+            System.out.println(entry.getKey() + ": " + entry.getValue());
+        }
+        System.out.println("---- End Student Info ----");
     }
 }
