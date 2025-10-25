@@ -2,6 +2,7 @@ package com.courseguide.services;
 
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.LoadState;
+import com.microsoft.playwright.options.WaitUntilState;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,7 +19,7 @@ public class WebPagePdfService {
             BrowserContext ctx = browser.newContext(ctxOpts);
             Page page = ctx.newPage();
 
-            page.navigate(url, new Page.NavigateOptions().setWaitUntil(LoadState.NETWORKIDLE));
+            page.navigate(url, new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
             page.waitForLoadState(LoadState.NETWORKIDLE);
 
             expandAll(page);
@@ -29,7 +30,7 @@ public class WebPagePdfService {
             Page.PdfOptions pdf = new Page.PdfOptions()
                 .setPrintBackground(true)
                 .setFormat("A4")
-                .setMargin(new Page.PdfMargins().setTop("10mm").setBottom("10mm").setLeft("10mm").setRight("10mm"));
+                .setMargin(new com.microsoft.playwright.options.Margin().setTop("10mm").setBottom("10mm").setLeft("10mm").setRight("10mm")); // sets all margins to 10mm
 
             return page.pdf(pdf);
         }

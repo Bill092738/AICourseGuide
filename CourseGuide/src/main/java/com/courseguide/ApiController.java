@@ -41,7 +41,7 @@ public class ApiController {
 
     // Updated: Receive all user info and store in public studentInfo object
     @PostMapping("/recommendations")
-    public Map<String, List<String>> recommendations(@RequestBody Map<String, Object> body) {
+    public Map<String, Object> recommendations(@RequestBody Map<String, Object> body) {
         // Store all received fields in the public studentInfo object
         studentInfo.clear();
         for (Map.Entry<String, Object> entry : body.entrySet()) {
@@ -50,10 +50,18 @@ public class ApiController {
 
         // Call debug function to print all info
         printStudentInfo(studentInfo);
-        sentenseGeneration(studentInfo);
+        String sentence = sentenceGeneration(studentInfo);
+        // Call DuckDuckGo to resolve a URL for the generated sentence
+        String duckUrl = resolveFirstDuckDuckGoUrl(sentence).orElse("");
+        debugPrintSnapshotUrl("recommendations", duckUrl);
+        // Call pdfService to render the resolved URL to a PDF
+        byte[] pdf = pdfService.renderExpandedPageToPdf(duckUrl);
 
         // Placeholder: return empty recommendations for now
-        return Map.of("recommendations", List.of());
+        return Map.of(
+            "recommendations", List.of(),
+            "summarySentence", sentence
+        );
     }
 
     // New: upload a single PDF and temp-store it; returns an ID to reference later
@@ -77,7 +85,7 @@ public class ApiController {
 
     // New: richer profile-based recommendations (JSON), referencing the uploaded PDF by ID
     @PostMapping(value = "/recommendations/profile", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Map<String, List<String>> recommendationsForProfile(@RequestBody StudentProfile profile) {
+    public Map<String, Object> recommendationsForProfile(@RequestBody StudentProfile profile) {
         // Prefer target goal major; fallback to user's current major
         String major =
             profile.target() != null && profile.target().major() != null && !profile.target().major().isBlank()
@@ -93,8 +101,19 @@ public class ApiController {
             // TODO: parse PDF for current/completed courses and transfer credits
         }
 
+        // Build info map for sentence generation
+        Map<String, Object> info = new HashMap<>();
+        info.put("graduationYear", profile.user() != null ? profile.user().graduationYear() : "");
+        info.put("major", major);
+        info.put("university", profile.user() != null ? profile.user().university() : "");
+
+        String sentence = sentenceGeneration(info);
+
         List<String> recs = engine.generateRecommendations(major, gpa);
-        return Map.of("recommendations", recs);
+        return Map.of(
+            "recommendations", recs,
+            "summarySentence", sentence
+        );
     }
 
     // Debug function to print all info in a given HashMap
@@ -107,9 +126,8 @@ public class ApiController {
     }
     
     // generate a sentence for student info
-    // Here will have a method called Sentence Generator which will generate sentences based on user input stored in studentInfo
-    public static void sentenceGeneration(Map<String, Object> info) {
-        System.out.println("---- Generated Sentence ----");
+    // Returns the generated sentence instead of printing only
+    public static String sentenceGeneration(Map<String, Object> info) {
         String graduationYear = "Unknown";
         String major = "Unknown";
         String university = "Unknown";
@@ -124,10 +142,11 @@ public class ApiController {
             }
         }
         
-        String sentence = "The " + graduationYear + " year graduate requirement of " + major + " at " + university ;
-        
+        String sentence = "The " + graduationYear + " year graduate requirement of " + major + " at " + university;
+        System.out.println("---- Generated Sentence ----");
         System.out.println(sentence);
         System.out.println("---- End Generated Sentence ----");
+        return sentence;
     }
 
     // Function to generate PDF snapshot of a given URL
@@ -151,7 +170,7 @@ public class ApiController {
     }
 
     // Helper: resolve the first DuckDuckGo result URL for a query
-    private Optional<String> resolveFirstDuckDuckGoUrl(String query) {
+    public Optional<String> resolveFirstDuckDuckGoUrl(String query) {
         try {
             RestTemplate restTemplate = new RestTemplate();
             String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
