@@ -41,6 +41,7 @@ public class ApiController {
 
         // Call debug function to print all info
         printStudentInfo(studentInfo);
+        sentenseGeneration(studentInfo);
 
         // Placeholder: return empty recommendations for now
         return Map.of("recommendations", List.of());
@@ -94,5 +95,28 @@ public class ApiController {
             System.out.println(entry.getKey() + ": " + entry.getValue());
         }
         System.out.println("---- End Student Info ----");
+    }
+    
+    //generate a sentense for AI
+    public static void sentenseGeneration(Map<String, Object> info) {
+        System.out.println("---- Generated Sentence ----");
+        String graduationYear = "Unknown";
+        String major = "Unknown";
+        String university = "Unknown";
+        
+        for (Map.Entry<String, Object> entry : info.entrySet()) {
+            if (entry.getKey().equals("graduationYear")) {
+                graduationYear = entry.getValue().toString();
+            } else if (entry.getKey().equals("major")) {
+                major = entry.getValue().toString();
+            } else if (entry.getKey().equals("university")) {
+                university = entry.getValue().toString();
+            }
+        }
+        
+        String sentence = "The " + graduationYear + " year graduate requirement of " + major + " at " + university ;
+        
+        System.out.println(sentence);
+        System.out.println("---- End Generated Sentence ----");
     }
 }
