@@ -40,6 +40,8 @@ export default function App() {
   })
   const [results, setResults] = useState<string[]>([])
   const [status, setStatus] = useState<string>("")
+  const [uploadProgress, setUploadProgress] = useState<string>("")
+  const [isUploading, setIsUploading] = useState(false)
 
   const onChange =
     <K extends keyof FormState>(key: K) =>
@@ -55,13 +57,74 @@ export default function App() {
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
     setForm((s) => ({ ...s, progressPdf: file }))
+    setUploadProgress("") // Clear previous upload status
+  }
+
+  // New: Manual upload function with confirmation
+  const uploadPdfNow = async () => {
+    if (!form.progressPdf) {
+      setUploadProgress("No file selected")
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress("Uploading...")
+
+    try {
+      const formData = new FormData()
+      formData.append("progressPdf", form.progressPdf)
+
+      const uploadRes = await fetch("/api/upload-progress", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!uploadRes.ok) {
+        throw new Error(`Upload failed: HTTP ${uploadRes.status}`)
+      }
+
+      const uploadData = await uploadRes.json()
+      const fileId = uploadData.progressFileId || ""
+      
+      console.log("PDF uploaded with ID:", fileId)
+      setUploadProgress(`✓ Uploaded successfully (ID: ${fileId.substring(0, 8)}...)`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error"
+      setUploadProgress(`✗ Upload failed: ${message}`)
+      console.error("Upload error:", err)
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const submit = async () => {
     setStatus("Loading...")
     setResults([])
     try {
-      // Send the full form; backend can ignore fields it doesn't need.
+      let progressFileId = ""
+
+      // Step 1: Upload the PDF if one was selected
+      if (form.progressPdf) {
+        setStatus("Uploading PDF...")
+        const formData = new FormData()
+        formData.append("progressPdf", form.progressPdf)
+
+        const uploadRes = await fetch("/api/upload-progress", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!uploadRes.ok) {
+          throw new Error(`PDF upload failed: HTTP ${uploadRes.status}`)
+        }
+
+        const uploadData = await uploadRes.json()
+        progressFileId = uploadData.progressFileId || ""
+        console.log("PDF uploaded with ID:", progressFileId)
+      }
+
+      // Step 2: Send recommendations request with the file ID
+      setStatus("Getting recommendations...")
       const payload = {
         university: form.university,
         major: form.major,
@@ -73,8 +136,8 @@ export default function App() {
         preferredElectives: form.preferredElectives,
         maxCreditHour: form.maxCreditHour === "" ? null : form.maxCreditHour,
         semester: form.semester,
-        // Old script expected { major, gpa } — keep these too.
         gpa: form.gpa === "" ? 0 : form.gpa,
+        progressFileId: progressFileId,
       }
 
       const res = await fetch("/api/recommendations", {
@@ -86,9 +149,11 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: RecommendationsResponse = await res.json()
       setResults(data.recommendations ?? [])
-      setStatus("")
+      setStatus("Complete!")
     } catch (err) {
-      setStatus("Error contacting backend")
+      const message = err instanceof Error ? err.message : "Unknown error"
+      setStatus(`Error: ${message}`)
+      console.error("Submit error:", err)
     }
   }
 
@@ -159,20 +224,53 @@ export default function App() {
           </p>
           <div className="field">
             <label htmlFor="progressPdf">Progress PDF</label>
-            <div className="flex items-center gap-3">
-              <input
-                id="progressPdf"
-                type="file"
-                accept="application/pdf"
-                onChange={onFileChange}
-                className="border-0 bg-transparent p-0 text-sm text-gray-900
-                           file:inline-flex file:items-center file:justify-center
-                           file:rounded-md file:border-0 file:bg-blue-600
-                           file:px-4 file:py-2 file:text-white
-                           hover:file:bg-blue-700 file:cursor-pointer"
-              />
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <input
+                  id="progressPdf"
+                  type="file"
+                  accept="application/pdf"
+                  onChange={onFileChange}
+                  className="border-0 bg-transparent p-0 text-sm text-gray-900
+                             file:inline-flex file:items-center file:justify-center
+                             file:rounded-md file:border-0 file:bg-blue-600
+                             file:px-4 file:py-2 file:text-white
+                             hover:file:bg-blue-700 file:cursor-pointer
+                             disabled:file:opacity-50 disabled:file:cursor-not-allowed"
+                  disabled={isUploading}
+                />
+                {form.progressPdf && (
+                  <span className="text-sm text-gray-600">{form.progressPdf.name}</span>
+                )}
+              </div>
+              
               {form.progressPdf && (
-                <span className="text-sm text-gray-600">{form.progressPdf.name}</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={uploadPdfNow}
+                    disabled={isUploading}
+                    className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Uploading...
+                      </>
+                    ) : (
+                      "Upload Now"
+                    )}
+                  </button>
+                  
+                  {uploadProgress && (
+                    <span className={`text-sm ${uploadProgress.startsWith('✓') ? 'text-green-600' : uploadProgress.startsWith('✗') ? 'text-red-600' : 'text-blue-600'}`}>
+                      {uploadProgress}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>

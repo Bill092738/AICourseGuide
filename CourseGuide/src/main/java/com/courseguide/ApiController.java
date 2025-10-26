@@ -5,6 +5,7 @@ import com.courseguide.dto.UserBasicInfo;
 import com.courseguide.processors.RecommendationEngine;
 import com.courseguide.services.FileStorageService;
 import com.courseguide.services.WebPagePdfService;
+import com.courseguide.services.LlamaAnalysisService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,6 +23,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.springframework.web.client.RestTemplate;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.io.IOException;
 
 // HTML fallback
 import org.jsoup.Jsoup;
@@ -40,6 +45,9 @@ public class ApiController {
 
     @Autowired
     private WebPagePdfService pdfService;
+
+    @Autowired
+    private LlamaAnalysisService llamaAnalysisService;
 
     // Public student info object for storing received data
     public static Map<String, Object> studentInfo = new HashMap<>();
@@ -70,6 +78,8 @@ public class ApiController {
         String duckUrl = maybeUrl.orElse("");
         debugPrintSnapshotUrl("recommendations", duckUrl);
 
+        String coursePlanCsvPath = "";
+        
         // Only render if we have a valid http(s) URL; otherwise skip silently
         if (isValidHttpUrl(duckUrl)) {
             try {
@@ -77,6 +87,25 @@ public class ApiController {
                 byte[] pdf = pdfService.renderExpandedPageToPdf(duckUrl);
                 boolean success = pdf != null && pdf.length > 0;
                 debugPdfGeneration(success, pdf != null ? pdf.length : 0);
+                
+                if (success) {
+                    // Find the most recent snapshot PDF
+                    Path snapshotDir = Paths.get(System.getProperty("user.dir")).resolve("snapshots");
+                    Path snapshotPdf = findMostRecentPdf(snapshotDir);
+                    
+                    // Find the uploaded progress PDF
+                    Path progressPdf = null;
+                    String progressFileId = Objects.toString(studentInfo.get("progressFileId"), "");
+                    if (!progressFileId.isEmpty()) {
+                        progressPdf = storage.resolve(progressFileId);
+                        System.out.println("Progress PDF found at: " + progressPdf.toAbsolutePath());
+                    }
+                    
+                    // Call LLM with both PDFs
+                    System.out.println("---- Triggering LLM Analysis ----");
+                    coursePlanCsvPath = llamaAnalysisService.analyzeAndGenerateCoursePlan(studentInfo, snapshotPdf, progressPdf);
+                    System.out.println("---- LLM Analysis Triggered ----");
+                }
             } catch (Exception ex) {
                 System.err.println("---- Snapshot PDF render failed ----");
                 System.err.println("Exception: " + ex.getClass().getName());
@@ -90,10 +119,12 @@ public class ApiController {
             debugPdfGeneration(false, 0);
         }
 
-        // Placeholder: return empty recommendations for now
+        // Return recommendations with CSV path
         return Map.of(
             "recommendations", List.of(),
-            "summarySentence", sentence
+            "summarySentence", sentence,
+            "coursePlanCsvPath", coursePlanCsvPath,
+            "coursePlanAvailable", !coursePlanCsvPath.isEmpty()
         );
     }
 
@@ -116,7 +147,7 @@ public class ApiController {
         }
     }
 
-    // New: richer profile-based recommendations (JSON), referencing the uploaded PDF by ID
+    // Updated: After PDF generation, analyze with LLM and generate course plan CSV
     @PostMapping(value = "/recommendations/profile", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> recommendationsForProfile(@RequestBody StudentProfile profile) {
         // Prefer target goal major; fallback to user's current major
@@ -125,28 +156,85 @@ public class ApiController {
                 ? profile.target().major()
                 : Optional.ofNullable(profile.user()).map(UserBasicInfo::major).orElse("");
 
-        // Placeholder GPA until PDF parsing is implemented
-        double gpa = 0.0;
-
-        // You can access the uploaded PDF path if needed:
-        if (profile.progressFileId() != null && !profile.progressFileId().isBlank()) {
-            // Path filePath = storage.resolve(profile.progressFileId());
-            // TODO: parse PDF for current/completed courses and transfer credits
-        }
-
-        // Build info map for sentence generation
+        // Build info map
         Map<String, Object> info = new HashMap<>();
         info.put("graduationYear", profile.user() != null ? profile.user().graduationYear() : "");
         info.put("major", major);
         info.put("university", profile.user() != null ? profile.user().university() : "");
 
         String sentence = sentenceGeneration(info);
+        String searchQuery = buildSearchQuery(info);
+        
+        // Resolve and generate PDF
+        Optional<String> maybeUrl = resolveSearchUrl(searchQuery);
+        String duckUrl = maybeUrl.orElse("");
+        debugPrintSnapshotUrl("recommendations/profile", duckUrl);
 
-        List<String> recs = engine.generateRecommendations(major, gpa);
-        return Map.of(
-            "recommendations", recs,
-            "summarySentence", sentence
-        );
+        String pdfSummary = "";
+        String coursePlanCsvPath = "";
+        
+        if (isValidHttpUrl(duckUrl)) {
+            try {
+                System.out.println("Generating PDF for degree requirements...");
+                byte[] pdf = pdfService.renderExpandedPageToPdf(duckUrl);
+                
+                if (pdf != null && pdf.length > 0) {
+                    debugPdfGeneration(true, pdf.length);
+                    
+                    // Find the most recent snapshot PDF
+                    Path snapshotDir = Paths.get(System.getProperty("user.dir")).resolve("snapshots");
+                    Path snapshotPdf = findMostRecentPdf(snapshotDir);
+                    
+                    // Find the uploaded progress PDF
+                    Path progressPdf = null;
+                    if (profile.progressFileId() != null && !profile.progressFileId().isBlank()) {
+                        progressPdf = storage.resolve(profile.progressFileId());
+                        System.out.println("Progress PDF found at: " + progressPdf.toAbsolutePath());
+                    }
+                    
+                    // Call LLM with both PDFs
+                    coursePlanCsvPath = llamaAnalysisService.analyzeAndGenerateCoursePlan(info, snapshotPdf, progressPdf);
+                }
+            } catch (Exception ex) {
+                System.err.println("PDF/LLM analysis failed: " + ex.getMessage());
+                ex.printStackTrace();
+                debugPdfGeneration(false, 0);
+            }
+        }
+
+        // Parse uploaded progress PDF if provided
+        if (profile.progressFileId() != null && !profile.progressFileId().isBlank()) {
+            Path progressPdfPath = storage.resolve(profile.progressFileId());
+            System.out.println("Progress PDF available at: " + progressPdfPath.toAbsolutePath());
+            // TODO: Parse this PDF to extract completed courses
+        }
+
+        List<String> recs = engine.generateRecommendations(major, 0.0);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("recommendations", recs);
+        result.put("summarySentence", sentence);
+        result.put("coursePlanCsvPath", coursePlanCsvPath);
+        result.put("coursePlanAvailable", !coursePlanCsvPath.isEmpty());
+        
+        return result;
+    }
+
+    private Path findMostRecentPdf(Path directory) throws IOException {
+        if (!Files.exists(directory)) {
+            return null;
+        }
+        
+        return Files.list(directory)
+            .filter(p -> p.toString().endsWith(".pdf"))
+            .max(Comparator.comparing(p -> {
+                try {
+                    return Files.getLastModifiedTime(p);
+                } catch (IOException e) {
+                    return null;
+                }
+            }))
+            .orElse(null);
     }
 
     // Debug function to print all info in a given HashMap
