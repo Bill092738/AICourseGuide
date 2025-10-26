@@ -20,7 +20,24 @@ type FormState = {
 
 type RecommendationsResponse = {
   recommendations?: string[]
+  coursePlanCsvPath?: string
+  coursePlanAvailable?: boolean
   [k: string]: unknown
+}
+
+type SelectedCourse = {
+  courseName: string
+  creditHours: number
+  category: string
+  description: string
+  prerequisites: string[]
+}
+
+type SelectResponse = {
+  courses: SelectedCourse[]
+  totalCredits: number
+  importSuccess: number
+  importErrors: string[]
 }
 
 export default function App() {
@@ -42,6 +59,9 @@ export default function App() {
   const [status, setStatus] = useState<string>("")
   const [uploadProgress, setUploadProgress] = useState<string>("")
   const [isUploading, setIsUploading] = useState(false)
+  const [selected, setSelected] = useState<SelectedCourse[]>([])
+  const [totalCredits, setTotalCredits] = useState<number>(0)
+  const [importErrors, setImportErrors] = useState<string[]>([])
 
   const onChange =
     <K extends keyof FormState>(key: K) =>
@@ -100,60 +120,54 @@ export default function App() {
   const submit = async () => {
     setStatus("Loading...")
     setResults([])
+    setSelected([])
+    setImportErrors([])
+    setTotalCredits(0)
     try {
-      let progressFileId = ""
-
-      // Step 1: Upload the PDF if one was selected
-      if (form.progressPdf) {
-        setStatus("Uploading PDF...")
-        const formData = new FormData()
-        formData.append("progressPdf", form.progressPdf)
-
-        const uploadRes = await fetch("/api/upload-progress", {
-          method: "POST",
-          body: formData,
-        })
-
-        if (!uploadRes.ok) {
-          throw new Error(`PDF upload failed: HTTP ${uploadRes.status}`)
-        }
-
-        const uploadData = await uploadRes.json()
-        progressFileId = uploadData.progressFileId || ""
-        console.log("PDF uploaded with ID:", progressFileId)
-      }
-
-      // Step 2: Send recommendations request with the file ID
-      setStatus("Getting recommendations...")
-      const payload = {
-        university: form.university,
-        major: form.major,
-        degreeLevel: form.degreeLevel,
-        graduationYear: form.graduationYear === "" ? null : form.graduationYear,
-        targetMajor: form.targetMajor,
-        targetMinor: form.targetMinor,
-        planName: form.planName,
-        preferredElectives: form.preferredElectives,
-        maxCreditHour: form.maxCreditHour === "" ? null : form.maxCreditHour,
-        semester: form.semester,
-        gpa: form.gpa === "" ? 0 : form.gpa,
-        progressFileId: progressFileId,
-      }
-
+      // Assume your existing call gets CSV path back:
       const res = await fetch("/api/recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          university: form.university,
+          major: form.major,
+          degreeLevel: form.degreeLevel,
+          graduationYear: form.graduationYear,
+          targetMajor: form.targetMajor,
+          targetMinor: form.targetMinor,
+          planName: form.planName,
+          preferredElectives: form.preferredElectives,
+          semester: form.semester,
+          gpa: form.gpa,
+        }),
       })
-
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: RecommendationsResponse = await res.json()
       setResults(data.recommendations ?? [])
+
+      if (data.coursePlanAvailable && data.coursePlanCsvPath) {
+        const max = form.maxCreditHour === "" || Number(form.maxCreditHour) <= 0 ? 18 : Number(form.maxCreditHour)
+        const selectRes = await fetch("/api/courses/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            coursePlanCsvPath: data.coursePlanCsvPath,
+            maxCredits: max,
+            completedCourses: [] as string[],
+          }),
+        })
+        if (!selectRes.ok) throw new Error(`Select HTTP ${selectRes.status}`)
+        const sel: SelectResponse = await selectRes.json()
+        setSelected(sel.courses ?? [])
+        setTotalCredits(sel.totalCredits ?? 0)
+        setImportErrors(sel.importErrors ?? [])
+      }
+
       setStatus("Complete!")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error"
       setStatus(`Error: ${message}`)
-      console.error("Submit error:", err)
+      console.error(err)
     }
   }
 
@@ -392,6 +406,45 @@ export default function App() {
             ))}
           </ul>
         </section>
+
+        {selected.length > 0 && (
+          <section className="mt-6 p-4 bg-white shadow rounded">
+            <h2 className="text-xl font-semibold mb-2">Selected Courses (max 6)</h2>
+            <p className="text-sm text-gray-600 mb-2">Total Credits: {totalCredits}</p>
+            {importErrors.length > 0 && (
+              <div className="mb-3">
+                <p className="text-red-600 text-sm">Import/selection notes:</p>
+                <ul className="list-disc ml-5 text-sm text-red-700">
+                  {importErrors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="py-2 pr-4">Course</th>
+                    <th className="py-2 pr-4">Credits</th>
+                    <th className="py-2 pr-4">Category</th>
+                    <th className="py-2 pr-4">Prerequisites</th>
+                    <th className="py-2 pr-4">Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.map((c, i) => (
+                    <tr key={i} className="border-b">
+                      <td className="py-2 pr-4 font-medium">{c.courseName}</td>
+                      <td className="py-2 pr-4">{c.creditHours}</td>
+                      <td className="py-2 pr-4">{c.category}</td>
+                      <td className="py-2 pr-4">{c.prerequisites?.join(", ") || "—"}</td>
+                      <td className="py-2 pr-4">{c.description || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )

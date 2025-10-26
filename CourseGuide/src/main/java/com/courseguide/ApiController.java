@@ -6,6 +6,11 @@ import com.courseguide.processors.RecommendationEngine;
 import com.courseguide.services.FileStorageService;
 import com.courseguide.services.WebPagePdfService;
 import com.courseguide.services.LlamaAnalysisService;
+import com.courseguide.services.CsvImportService;
+import com.courseguide.services.CourseSelectionService;
+import com.courseguide.services.SimpleCsvSelectionService;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -48,6 +53,15 @@ public class ApiController {
 
     @Autowired
     private LlamaAnalysisService llamaAnalysisService;
+
+    @Autowired
+    private CsvImportService csvImportService;
+
+    @Autowired
+    private CourseSelectionService courseSelectionService;
+
+    @Autowired
+    private SimpleCsvSelectionService simpleCsvSelectionService;
 
     // Public student info object for storing received data
     public static Map<String, Object> studentInfo = new HashMap<>();
@@ -218,6 +232,78 @@ public class ApiController {
         result.put("coursePlanAvailable", !coursePlanCsvPath.isEmpty());
         
         return result;
+    }
+
+    @PostMapping("/courses/select")
+    public Map<String, Object> selectCourses(@RequestBody Map<String, Object> body) {
+        String csvPath = Objects.toString(body.get("coursePlanCsvPath"), "");
+        int maxCredits = body.containsKey("maxCredits")
+            ? Integer.parseInt(String.valueOf(body.get("maxCredits")))
+            : 18;
+        if (maxCredits <= 0) maxCredits = 18;
+
+        @SuppressWarnings("unchecked")
+        List<String> completedList = (List<String>) body.getOrDefault("completedCourses", List.of());
+        Set<String> completedCourses = new HashSet<>(completedList);
+
+        Map<String, Object> response = new HashMap<>();
+        List<?> selected = List.of();
+        int totalCredits = 0;
+        List<String> importErrors = new ArrayList<>();
+        int importSuccess = 0;
+
+        boolean usedSql = false;
+
+        try {
+            // Try DB-backed path
+            CsvImportService.ImportResult importResult = csvImportService.importCoursePlan(csvPath);
+            importSuccess = importResult.getSuccessCount();
+            importErrors.addAll(importResult.getErrors());
+
+            List<com.courseguide.services.CourseSelectionService.CourseInfo> sqlSelected =
+                courseSelectionService.selectSixCourses(maxCredits, completedCourses);
+            selected = sqlSelected;
+            totalCredits = sqlSelected.stream()
+                .mapToInt(com.courseguide.services.CourseSelectionService.CourseInfo::getCreditHours)
+                .sum();
+            usedSql = true;
+
+        } catch (org.springframework.jdbc.CannotGetJdbcConnectionException dbEx) {
+            System.err.println("SQL unavailable, falling back: " + dbEx.getMessage());
+            try {
+                var fallback = simpleCsvSelectionService.selectFromCsv(java.nio.file.Path.of(csvPath), maxCredits, completedCourses);
+                selected = fallback;
+                totalCredits = fallback.stream()
+                    .mapToInt(com.courseguide.services.SimpleCsvSelectionService.CourseInfo::getCreditHours)
+                    .sum();
+                importErrors.add("SQL unavailable; used CSV-only fallback selection.");
+            } catch (Exception parseEx) {
+                importErrors.add("Fallback failed: " + parseEx.getMessage());
+            }
+
+        } catch (org.springframework.dao.DataAccessException dbEx) {
+            System.err.println("SQL data access error, falling back: " + dbEx.getMessage());
+            try {
+                var fallback = simpleCsvSelectionService.selectFromCsv(java.nio.file.Path.of(csvPath), maxCredits, completedCourses);
+                selected = fallback;
+                totalCredits = fallback.stream()
+                    .mapToInt(com.courseguide.services.SimpleCsvSelectionService.CourseInfo::getCreditHours)
+                    .sum();
+                importErrors.add("SQL error; used CSV-only fallback selection.");
+            } catch (Exception parseEx) {
+                importErrors.add("Fallback failed: " + parseEx.getMessage());
+            }
+
+        } catch (Exception ex) {
+            importErrors.add("Unexpected error: " + ex.getMessage());
+        } finally {
+            response.put("courses", selected);
+            response.put("totalCredits", totalCredits);
+            response.put("importSuccess", importSuccess);
+            response.put("importErrors", importErrors);
+            response.put("usedSql", usedSql);
+            return response;
+        }
     }
 
     private Path findMostRecentPdf(Path directory) throws IOException {

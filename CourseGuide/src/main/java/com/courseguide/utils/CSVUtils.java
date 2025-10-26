@@ -15,6 +15,10 @@ public class CSVUtils {
     /**
      * Parses courses from a CSV file with the format:
      * CourseName,PreqCourseName,CreditHours,Major1/Major2/GenedEdu/Minor,Description
+     * Tolerant to missing/invalid fields; defaults:
+     * - creditHours -> 3
+     * - category    -> "Major1"
+     * - description -> ""
      */
     public static List<Course> parseCoursesFromCSV(String filePath) throws IOException {
         List<Course> courses = new ArrayList<>();
@@ -31,27 +35,40 @@ public class CSVUtils {
             if (line.isEmpty()) continue;
             
             String[] fields = split(line);
-            if (fields.length >= 5) {
+            // Pad missing fields
+            String courseName      = fields.length > 0 ? fields[0].trim() : "";
+            String preqCourseName  = fields.length > 1 ? fields[1].trim() : "";
+            String creditStr       = fields.length > 2 ? fields[2].trim() : "";
+            String category        = fields.length > 3 ? fields[3].trim() : "Major1";
+            String description     = fields.length > 4 ? String.join(",", Arrays.copyOfRange(fields, 4, fields.length)).trim() : "";
+
+            if (courseName.isEmpty()) {
+                System.err.println("Skipping row " + (i + 1) + " due to empty course name: " + line);
+                continue;
+            }
+
+            int creditHours = 3;
+            if (!creditStr.isEmpty()) {
                 try {
-                    String courseName = fields[0].trim();
-                    String preqCourseName = fields[1].trim();
-                    int creditHours = Integer.parseInt(fields[2].trim());
-                    String category = fields[3].trim();
-                    String description = fields[4].trim();
-                    
-                    Course course = new Course(courseName, preqCourseName, creditHours, category, description);
-                    courses.add(course);
+                    creditHours = Integer.parseInt(creditStr);
                 } catch (NumberFormatException e) {
-                    System.err.println("Skipping invalid row " + (i + 1) + ": " + line);
+                    System.err.println("Row " + (i + 1) + " invalid credits '" + creditStr + "', defaulting to 3 for: " + courseName);
                 }
             }
+
+            if (category.isEmpty()) {
+                category = "Major1";
+            }
+
+            Course course = new Course(courseName, preqCourseName, creditHours, category, description);
+            courses.add(course);
         }
         
         return courses;
     }
     
     /**
-     * Parses courses from CSV content string
+     * Parses courses from CSV content string (tolerant).
      */
     public static List<Course> parseCoursesFromCSVContent(String csvContent) {
         List<Course> courses = new ArrayList<>();
@@ -68,20 +85,32 @@ public class CSVUtils {
             if (line.isEmpty()) continue;
             
             String[] fields = split(line);
-            if (fields.length >= 5) {
+            String courseName      = fields.length > 0 ? fields[0].trim() : "";
+            String preqCourseName  = fields.length > 1 ? fields[1].trim() : "";
+            String creditStr       = fields.length > 2 ? fields[2].trim() : "";
+            String category        = fields.length > 3 ? fields[3].trim() : "Major1";
+            String description     = fields.length > 4 ? String.join(",", Arrays.copyOfRange(fields, 4, fields.length)).trim() : "";
+
+            if (courseName.isEmpty()) {
+                System.err.println("Skipping line " + (i + 1) + " due to empty course name: " + line);
+                continue;
+            }
+
+            int creditHours = 3;
+            if (!creditStr.isEmpty()) {
                 try {
-                    String courseName = fields[0].trim();
-                    String preqCourseName = fields[1].trim();
-                    int creditHours = Integer.parseInt(fields[2].trim());
-                    String category = fields[3].trim();
-                    String description = fields[4].trim();
-                    
-                    Course course = new Course(courseName, preqCourseName, creditHours, category, description);
-                    courses.add(course);
+                    creditHours = Integer.parseInt(creditStr);
                 } catch (NumberFormatException e) {
-                    System.err.println("Skipping invalid row " + (i + 1) + ": " + line);
+                    System.err.println("Line " + (i + 1) + " invalid credits '" + creditStr + "', defaulting to 3 for: " + courseName);
                 }
             }
+
+            if (category.isEmpty()) {
+                category = "Major1";
+            }
+
+            Course course = new Course(courseName, preqCourseName, creditHours, category, description);
+            courses.add(course);
         }
         
         return courses;
