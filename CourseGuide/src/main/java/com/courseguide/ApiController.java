@@ -73,13 +73,21 @@ public class ApiController {
         // Only render if we have a valid http(s) URL; otherwise skip silently
         if (isValidHttpUrl(duckUrl)) {
             try {
+                System.out.println("Attempting to generate PDF for: " + duckUrl);
                 byte[] pdf = pdfService.renderExpandedPageToPdf(duckUrl);
-                // (Optional) store or cache the pdf if needed
+                boolean success = pdf != null && pdf.length > 0;
+                debugPdfGeneration(success, pdf != null ? pdf.length : 0);
             } catch (Exception ex) {
-                System.err.println("Snapshot PDF render failed: " + ex.getMessage());
+                System.err.println("---- Snapshot PDF render failed ----");
+                System.err.println("Exception: " + ex.getClass().getName());
+                System.err.println("Message: " + ex.getMessage());
+                ex.printStackTrace();
+                System.err.println("---- End exception ----");
+                debugPdfGeneration(false, 0);
             }
         } else {
             System.out.println("No valid URL resolved for snapshot; skipping PDF render.");
+            debugPdfGeneration(false, 0);
         }
 
         // Placeholder: return empty recommendations for now
@@ -337,6 +345,18 @@ public class ApiController {
         return ResponseEntity.ok()
             .header("Content-Disposition", "attachment; filename=\"snapshot.pdf\"")
             .body(pdf);
+    }
+
+    // Debug function to verify PDF generation
+    private void debugPdfGeneration(boolean success, int size) {
+        System.out.println("---- Debug: PDF Generation Status ----");
+        if (success) {
+            System.out.println("PDF successfully generated and stored");
+            System.out.println("Size: " + size + " bytes");
+        } else {
+            System.out.println("PDF generation failed - nothing generated");
+        }
+        System.out.println("---- End PDF Generation Status ----");
     }
 
     // Helper to validate http(s) URLs

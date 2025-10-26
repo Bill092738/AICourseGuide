@@ -12,8 +12,18 @@ public class FileStorageService {
     private final Path uploadDir;
 
     public FileStorageService() throws IOException {
-        // Create a per-run temp directory
-        this.uploadDir = Files.createTempDirectory("courseguide-uploads-");
+        // Create uploads directory in the project workspace (not /tmp)
+        Path workspaceRoot = Paths.get(System.getProperty("user.dir"));
+        this.uploadDir = workspaceRoot.resolve("uploads");
+        
+        // Create directory if it doesn't exist
+        if (!Files.exists(uploadDir)) {
+            Files.createDirectories(uploadDir);
+        }
+        
+        System.out.println("---- Upload directory initialized ----");
+        System.out.println("Location: " + uploadDir.toAbsolutePath());
+        System.out.println("---- End ----");
     }
 
     public String store(MultipartFile file) throws IOException {
@@ -26,5 +36,10 @@ public class FileStorageService {
 
     public Path resolve(String id) {
         return uploadDir.resolve(id + ".pdf");
+    }
+
+    // Expose the upload directory for use by other services
+    public Path getUploadDir() {
+        return uploadDir;
     }
 }

@@ -2,3 +2,7 @@ target/
 *.iml
 .idea/
 .DS_Store
+
+# Generated PDFs and uploads
+/CourseGuide/snapshots/*.pdf
+/CourseGuide/uploads/*.pdf
