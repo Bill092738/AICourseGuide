@@ -1,0 +1,44 @@
+CourseName,PreqCourseName,CreditHours,Category,Description
+CSE 2221,CSE 1223,4,CIS,Software I: Software Components
+CSE 2231,CSE 2221;Math 1151,4,CIS,Software II: Software Development and Design
+CSE 2321,CSE 2221;Math 1151,3,CIS,Foundations I: Discrete Structures
+CSE 2331,CSE 2321,3,CIS,Foundations II: Data Structures and Algorithms
+CSE 3221,CSE 2231;CSE 2331,4,CIS,Software III: Software Engineering
+CSE 3231,CSE 2231;CSE 2331,3,CIS,Software IV: Software Architecture
+CSE 3321,CSE 2331,3,CIS,Algorithms and Complexity
+CSE 3331,CSE 3321,3,CIS,Theory of Computation
+MATH 1151,,,,Calculus I
+CSE 4989,,,,Senior Capstone Project
+CSE 4990,,,,Senior Capstone Project II
+CSE 4999,,,,Independent Study in Computer Science and Engineering
+CSE 4998,,,,Special Topics in Computer Science and Engineering
+CSE 4997,,,,Directed Research in Computer Science and Engineering
+CSE 4996,,,,Undergraduate Research in Computer Science and Engineering
+CSE 4995,,,,Undergraduate Internship in Computer Science and Engineering
+CSE 4994,,,,Cooperative Education in Computer Science and Engineering
+CSE 4993,,,,Cooperative Education in Computer Science and Engineering
+CSE 4992,,,,Cooperative Education in Computer Science and Engineering
+CSE 4991,,,,Cooperative Education in Computer Science and Engineering
+CSE 4990,,,,Senior Capstone Project II
+CSE 4989,,,,Senior Capstone Project
+CSE 4988,,,,Special Topics in Computer Science and Engineering
+CSE 4987,,,,Directed Research in Computer Science and Engineering
+CSE 4986,,,,Undergraduate Research in Computer Science and Engineering
+CSE 4985,,,,Undergraduate Internship in Computer Science and Engineering
+CSE 4984,,,,Cooperative Education in Computer Science and Engineering
+CSE 4983,,,,Cooperative Education in Computer Science and Engineering
+CSE 4982,,,,Cooperative Education in Computer Science and Engineering
+CSE 4981,,,,Cooperative Education in Computer Science and Engineering
+CSE 4980,,,,Special Topics in Computer Science and Engineering
+CSE 4979,,,,Directed Research in Computer Science and Engineering
+CSE 4978,,,,Undergraduate Research in Computer Science and Engineering
+CSE 4977,,,,Undergraduate Internship in Computer Science and Engineering
+CSE 4976,,,,Cooperative Education in Computer Science and Engineering
+CSE 4975,,,,Cooperative Education in Computer Science and Engineering
+CSE 4974,,,,Cooperative Education in Computer Science and Engineering
+CSE 4973,,,,Cooperative Education in Computer Science and Engineering
+CSE 4972,,,,Special Topics in Computer Science and Engineering
+CSE 4971,,,,Directed Research in Computer Science and Engineering
+CSE 4970,,,,Undergraduate Research in Computer Science and Engineering
+CSE 4969,,,,Undergraduate Internship in Computer Science and Engineering
+CSE 4968,,,,Cooperative Education in Computer Science and Engineering

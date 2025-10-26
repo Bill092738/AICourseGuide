@@ -79,40 +79,40 @@ public class ApiController {
         debugPrintSnapshotUrl("recommendations", duckUrl);
 
         String coursePlanCsvPath = "";
-        
-        // Only render if we have a valid http(s) URL; otherwise skip silently
+        boolean pdfSuccess = false;
+        byte[] pdf = null;
+
         if (isValidHttpUrl(duckUrl)) {
             try {
                 System.out.println("Attempting to generate PDF for: " + duckUrl);
-                byte[] pdf = pdfService.renderExpandedPageToPdf(duckUrl);
-                boolean success = pdf != null && pdf.length > 0;
-                debugPdfGeneration(success, pdf != null ? pdf.length : 0);
-                
-                if (success) {
-                    // Find the most recent snapshot PDF
+                pdf = pdfService.renderExpandedPageToPdf(duckUrl);
+                pdfSuccess = pdf != null && pdf.length > 0;
+                debugPdfGeneration(pdfSuccess, pdf != null ? pdf.length : 0);
+            } catch (Exception ex) {
+                System.err.println("---- Snapshot PDF render failed ----");
+                System.err.println("Message: " + ex.getMessage());
+                debugPdfGeneration(false, 0);
+            }
+
+            if (pdfSuccess) {
+                try {
                     Path snapshotDir = Paths.get(System.getProperty("user.dir")).resolve("snapshots");
                     Path snapshotPdf = findMostRecentPdf(snapshotDir);
-                    
-                    // Find the uploaded progress PDF
+
                     Path progressPdf = null;
                     String progressFileId = Objects.toString(studentInfo.get("progressFileId"), "");
                     if (!progressFileId.isEmpty()) {
                         progressPdf = storage.resolve(progressFileId);
                         System.out.println("Progress PDF found at: " + progressPdf.toAbsolutePath());
                     }
-                    
-                    // Call LLM with both PDFs
+
                     System.out.println("---- Triggering LLM Analysis ----");
                     coursePlanCsvPath = llamaAnalysisService.analyzeAndGenerateCoursePlan(studentInfo, snapshotPdf, progressPdf);
-                    System.out.println("---- LLM Analysis Triggered ----");
+                    System.out.println("---- LLM Analysis Done ----");
+                } catch (Exception llmEx) {
+                    System.err.println("LLM analysis failed: " + llmEx.getMessage());
+                    // Do NOT flip PDF status; continue gracefully
                 }
-            } catch (Exception ex) {
-                System.err.println("---- Snapshot PDF render failed ----");
-                System.err.println("Exception: " + ex.getClass().getName());
-                System.err.println("Message: " + ex.getMessage());
-                ex.printStackTrace();
-                System.err.println("---- End exception ----");
-                debugPdfGeneration(false, 0);
             }
         } else {
             System.out.println("No valid URL resolved for snapshot; skipping PDF render.");
