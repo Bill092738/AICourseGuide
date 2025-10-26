@@ -29,9 +29,6 @@ CourseGuide/
     dto/                   # Data transfer objects (records, enums)
     utils/                 # Utility classes
     ...
-  src/main/resources/public/
-    index-old.html         # Legacy HTML client (for reference)
-    app-old.js             # Legacy JS client (for reference)
   pom.xml                  # Maven build file
   ...
 ```
@@ -40,8 +37,13 @@ CourseGuide/
 
 ## Prerequisites
 
-- Java 17+ (for backend)
-- Node.js 18+ and npm (for frontend development)
+- Java 21+ (backend uses Java 21 features)
+- Node.js 18+ and npm (frontend development)
+- Maven 3.6+ (backend build)
+- MySQL 8.0+ (course database and prerequisite DAG)
+- Llama API Server running on http://localhost:8075 (LLM analysis)
+- Optional
+- Playwright (auto-installed by Maven for web scraping)
 
 ---
 
@@ -102,13 +104,5 @@ CourseGuide/
 
 - Frontend uses ESLint (see [`frontend/eslint.config.js`](CourseGuide/frontend/eslint.config.js))
 - Prettier or other formatting tools can be added as needed.
-
----
-
-## Notes
-
-- The backend stores uploaded PDFs in a temporary directory per run.
-- See [`frontend/README.md`](CourseGuide/frontend/README.md) for more frontend-specific info.
-- The legacy HTML/JS client is preserved for reference.
 
 ---

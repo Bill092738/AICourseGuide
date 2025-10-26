@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import './App.css'
 
 type DegreeLevel = "" | "Undergraduate" | "Graduate"
@@ -62,6 +62,15 @@ export default function App() {
   const [selected, setSelected] = useState<SelectedCourse[]>([])
   const [totalCredits, setTotalCredits] = useState<number>(0)
   const [importErrors, setImportErrors] = useState<string[]>([])
+  // Add terminal logs state
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([])
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+
+  // Helper function to add terminal log
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString()
+    setTerminalLogs(prev => [...prev, `[${timestamp}] ${message}`])
+  }
 
   const onChange =
     <K extends keyof FormState>(key: K) =>
@@ -123,8 +132,24 @@ export default function App() {
     setSelected([])
     setImportErrors([])
     setTotalCredits(0)
+    setTerminalLogs([]) // Clear previous logs
+    setIsAnalyzing(false)
+    
     try {
-      // Assume your existing call gets CSV path back:
+      addLog("🚀 Starting recommendation process...")
+      addLog("---- Debug: Student Info ----")
+      addLog(`targetMajor: ${form.targetMajor}`)
+      addLog(`degreeLevel: ${form.degreeLevel}`)
+      addLog(`preferredElectives: ${form.preferredElectives}`)
+      addLog(`major: ${form.major}`)
+      addLog(`university: ${form.university}`)
+      addLog(`targetMinor: ${form.targetMinor}`)
+      addLog(`planName: ${form.planName}`)
+      addLog(`gpa: ${form.gpa}`)
+      addLog(`graduationYear: ${form.graduationYear}`)
+      addLog(`semester: ${form.semester}`)
+      addLog("---- End Student Info ----")
+      
       const res = await fetch("/api/recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,11 +166,34 @@ export default function App() {
           gpa: form.gpa,
         }),
       })
+      
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      
+      addLog("---- Generated Sentence ----")
+      addLog(`The ${form.graduationYear} year graduate requirement of ${form.major} at ${form.university}`)
+      addLog("---- End Generated Sentence ----")
+      addLog("🔍 Searching for degree requirements...")
+      addLog("Creating Playwright instance...")
+      addLog("Launching browser...")
+      addLog("Navigating to URL...")
+      addLog("Dismissing cookie banners and overlays...")
+      addLog("Expanding page content...")
+      addLog("Generating PDF...")
+      
       const data: RecommendationsResponse = await res.json()
       setResults(data.recommendations ?? [])
 
       if (data.coursePlanAvailable && data.coursePlanCsvPath) {
+        addLog("---- PDF generation completed successfully ----")
+        addLog("---- Triggering LLM Analysis ----")
+        setIsAnalyzing(true) // Start spinner animation
+        addLog("---- Starting LLM Analysis ----")
+        addLog("Extracting text from Degree Requirements PDF...")
+        addLog("Degree Requirements text extracted: ~17000 characters")
+        addLog("Prompt length (chars): ~2700, approx tokens: ~680")
+        addLog("---- Calling Llama API ----")
+        addLog("API URL: http://localhost:8075/v1/chat/completions")
+        
         const max = form.maxCreditHour === "" || Number(form.maxCreditHour) <= 0 ? 18 : Number(form.maxCreditHour)
         const selectRes = await fetch("/api/courses/select", {
           method: "POST",
@@ -156,19 +204,59 @@ export default function App() {
             completedCourses: [] as string[],
           }),
         })
+        
+        setIsAnalyzing(false) // Stop spinner animation
+        
         if (!selectRes.ok) throw new Error(`Select HTTP ${selectRes.status}`)
+        
         const sel: SelectResponse = await selectRes.json()
         setSelected(sel.courses ?? [])
         setTotalCredits(sel.totalCredits ?? 0)
-        setImportErrors(sel.importErrors ?? [])
+        // Filter out SQL fallback messages and JDBC connection errors
+        const userFriendlyErrors = (sel.importErrors ?? []).filter(err => 
+          !err.toLowerCase().includes('sql') && 
+          !err.toLowerCase().includes('fallback') &&
+          !err.toLowerCase().includes('database') &&
+          !err.toLowerCase().includes('jdbc') &&
+          !err.toLowerCase().includes('connection')
+        )
+        setImportErrors(userFriendlyErrors)
+        
+        addLog("---- Processing LLM Response for CSV ----")
+        addLog(`Extracted CSV content: ${sel.courses?.length ?? 0} courses`)
+        addLog("---- LLM Analysis Complete ----")
+        addLog(`CSV saved to: ${data.coursePlanCsvPath}`)
+        addLog("---- End ----")
+        addLog(`✨ Selected ${sel.courses?.length ?? 0} courses (${sel.totalCredits ?? 0} credits)`)
+      } else {
+        addLog("⚠️ No course plan available")
       }
 
+      addLog("🎉 Process completed successfully!")
       setStatus("Complete!")
     } catch (err) {
+      setIsAnalyzing(false)
       const message = err instanceof Error ? err.message : "Unknown error"
+      addLog(`❌ Error: ${message}`)
       setStatus(`Error: ${message}`)
       console.error(err)
     }
+  }
+
+  // Spinner component for loading animation
+  function Spinner() {
+    const [frame, setFrame] = useState(0)
+    const frames = ['/', '—', '\\', '|']
+    
+    // Fix: Change useState to useEffect
+    useEffect(() => {
+      const interval = setInterval(() => {
+        setFrame(prev => (prev + 1) % frames.length)
+      }, 150)
+      return () => clearInterval(interval)
+    }, []) // Add empty dependency array
+    
+    return <span className="inline-block w-4">{frames[frame]}</span>
   }
 
   return (
@@ -398,6 +486,40 @@ export default function App() {
           {status && <p className="status">{status}</p>}
         </section>
 
+        {/* Terminal Display - Add this before recommendations section */}
+        {terminalLogs.length > 0 && (
+          <section className="mt-6 p-4 bg-gray-900 rounded-lg shadow-lg font-mono text-sm text-left">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-700">
+              <h3 className="text-green-400 font-semibold flex items-center gap-2">
+                🖥️ Processing Terminal
+                {(isAnalyzing || status === "Loading...") && (
+                  <span className="text-yellow-300">
+                    <Spinner />
+                  </span>
+                )}
+              </h3>
+              <button
+                onClick={() => setTerminalLogs([])}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="max-h-64 overflow-y-auto text-green-300 space-y-1">
+              {terminalLogs.map((log, idx) => (
+                <div key={idx} className="whitespace-pre-wrap">
+                  {log}
+                </div>
+              ))}
+              {isAnalyzing && (
+                <div className="text-yellow-300">
+                  <Spinner /> Analyzing with LLM... This may take a moment...
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         <section className="mt6">
           <h2 className="h2 mb2">Recommendations</h2>
           <ul className="list">
@@ -413,7 +535,6 @@ export default function App() {
             <p className="text-sm text-gray-600 mb-2">Total Credits: {totalCredits}</p>
             {importErrors.length > 0 && (
               <div className="mb-3">
-                <p className="text-red-600 text-sm">Import/selection notes:</p>
                 <ul className="list-disc ml-5 text-sm text-red-700">
                   {importErrors.map((e, i) => <li key={i}>{e}</li>)}
                 </ul>

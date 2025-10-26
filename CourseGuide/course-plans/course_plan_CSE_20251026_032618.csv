@@ -1,0 +1,36 @@
+CourseName,PreqCourseName,CreditHours,Category,Description
+CSE 2221,,4,Major,Software I: Software Components
+CSE 2231,CSE 2221,4,Major,Software II: Software Development and Design
+CSE 2321,CSE 2221,3,Major,Foundations I: Discrete Structures
+Math 1151,,4,Major,Calculus I
+CSE 2322,CSE 2321,3,Major,Foundations II: Algorithms and Data Structures
+CSE 2233,CSE 2231,3,Major,Software III: Software Engineering
+CSE 3221,CSE 2233,3,Major,Software IV: Software Systems
+CSE 3321,CSE 2322,3,Major,Foundations III: Theory of Computation
+CSE 3322,CSE 3321,3,Major,Foundations IV: Advanced Topics in Theory
+CSE 3222,CSE 3221,3,Major,Software V: Software Architecture
+CSE 3331,CSE 3322,3,Major,Foundations V: Cryptography and Security
+CSE 3332,CSE 3331,3,Major,Foundations VI: Machine Learning
+CSE 3341,CSE 3332,3,Major,Foundations VII: Artificial Intelligence
+CSE 3351,CSE 3341,3,Major,Foundations VIII: Computer Networks
+CSE 3361,CSE 3351,3,Major,Foundations IX: Operating Systems
+CSE 3371,CSE 3361,3,Major,Foundations X: Database Systems
+CSE 3381,CSE 3371,3,Major,Foundations XI: Human-Computer Interaction
+CSE 3391,CSE 3381,3,Major,Foundations XII: Computer Graphics
+CSE 3401,CSE 3391,3,Major,Foundations XIII: Parallel and Distributed Computing
+CSE 3411,CSE 3401,3,Major,Foundations XIV: Quantum Computing
+CSE 3421,CSE 3411,3,Major,Foundations XV: Computer Vision
+CSE 3431,CSE 3421,3,Major,Foundations XVI: Robotics
+CSE 3441,CSE 3431,3,Major,Foundations XVII: Computer Security
+CSE 3451,CSE 3441,3,Major,Foundations XVIII: Cybersecurity
+CSE 3461,CSE 3451,3,Major,Foundations XIX: Ethical Hacking
+CSE 3471,CSE 3461,3,Major,Foundations XX: Cyber Defense
+CSE 3481,CSE 3471,3,Major,Foundations XXI: Cybersecurity Policy
+CSE 3491,CSE 3481,3,Major,Foundations XXII: Cybersecurity Law
+CSE 3501,CSE 3491,3,Major,Foundations XXIII: Cybersecurity Ethics
+CSE 3511,CSE 3501,3,Major,Foundations XXIV: Cybersecurity Management
+CSE 3521,CSE 3511,3,Major,Foundations XXV: Cybersecurity Leadership
+CSE 3531,CSE 3521,3,Major,Foundations XXVI: Cybersecurity Innovation
+CSE 3541,CSE 3531,3,Major,Foundations XXVII: Cybersecurity Entrepreneurship
+CSE 3551,CSE 3541,3,Major,Foundations XXVIII: Cybersecurity Research
+CSE 3561,CSE 3551,3,Major,Foundations XXIX: Cybersecurity Practice

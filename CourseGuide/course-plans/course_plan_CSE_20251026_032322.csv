@@ -1,0 +1,4 @@
+CourseName,PreqCourseName,CreditHours,Category,Description
+CSE 2221,,,CSE,Software I: Software Components
+CSE 2231,CSE 2221,4,CSE,Software II: Software Development and Design
+CSE 2321,CSE 2221,3,CSE,Foundations I: Discrete Structures
