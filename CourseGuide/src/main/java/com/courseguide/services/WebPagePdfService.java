@@ -11,6 +11,14 @@ import java.util.List;
 public class WebPagePdfService {
 
     public byte[] renderExpandedPageToPdf(String url) {
+        // Fail fast on bad input
+        if (url == null || url.isBlank()) {
+            throw new IllegalArgumentException("URL is blank");
+        }
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            throw new IllegalArgumentException("URL must start with http:// or https://");
+        }
+
         try (Playwright pw = Playwright.create()) {
             Browser browser = pw.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
             Browser.NewContextOptions ctxOpts = new Browser.NewContextOptions()

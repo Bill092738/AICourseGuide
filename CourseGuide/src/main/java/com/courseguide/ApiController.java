@@ -13,11 +13,21 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpEntity;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.springframework.web.client.RestTemplate;
+import java.net.URI;
+
+// HTML fallback
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import java.net.URLDecoder;
 
 @RestController
 @RequestMapping("/api")
@@ -51,11 +61,26 @@ public class ApiController {
         // Call debug function to print all info
         printStudentInfo(studentInfo);
         String sentence = sentenceGeneration(studentInfo);
-        // Call DuckDuckGo to resolve a URL for the generated sentence
-        String duckUrl = resolveFirstDuckDuckGoUrl(sentence).orElse("");
+
+        // Build a search-friendly query instead of using the human sentence
+        String searchQuery = buildSearchQuery(studentInfo);
+
+        // Call DuckDuckGo to resolve a URL for the built query (with HTML fallback)
+        Optional<String> maybeUrl = resolveSearchUrl(searchQuery);
+        String duckUrl = maybeUrl.orElse("");
         debugPrintSnapshotUrl("recommendations", duckUrl);
-        // Call pdfService to render the resolved URL to a PDF
-        byte[] pdf = pdfService.renderExpandedPageToPdf(duckUrl);
+
+        // Only render if we have a valid http(s) URL; otherwise skip silently
+        if (isValidHttpUrl(duckUrl)) {
+            try {
+                byte[] pdf = pdfService.renderExpandedPageToPdf(duckUrl);
+                // (Optional) store or cache the pdf if needed
+            } catch (Exception ex) {
+                System.err.println("Snapshot PDF render failed: " + ex.getMessage());
+            }
+        } else {
+            System.out.println("No valid URL resolved for snapshot; skipping PDF render.");
+        }
 
         // Placeholder: return empty recommendations for now
         return Map.of(
@@ -152,8 +177,8 @@ public class ApiController {
     // Function to generate PDF snapshot of a given URL
     @GetMapping(value = "/snapshot/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> snapshotPdf(@RequestParam String url) {
-        if (url == null || url.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "url is required");
+        if (url == null || url.isBlank() || !isValidHttpUrl(url)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "valid http(s) url is required");
         }
         debugPrintSnapshotUrl("direct", url);
         byte[] pdf = pdfService.renderExpandedPageToPdf(url);
@@ -165,29 +190,76 @@ public class ApiController {
     // Debug printer for snapshot URLs
     private static void debugPrintSnapshotUrl(String source, String url) {
         System.out.println("---- Debug: Snapshot URL (" + source + ") ----");
-        System.out.println(url);
+        System.out.println(url == null || url.isBlank() ? "(empty)" : url);
         System.out.println("---- End Snapshot URL ----");
     }
 
-    // Helper: resolve the first DuckDuckGo result URL for a query
+    // Build a query that works better with DuckDuckGo Instant Answer API
+    private static String buildSearchQuery(Map<String, Object> info) {
+        String year = Objects.toString(info.getOrDefault("graduationYear", ""), "").trim();
+        String major = Objects.toString(info.getOrDefault("major", ""), "").trim();
+        String university = Objects.toString(info.getOrDefault("university", ""), "").trim();
+
+        List<String> parts = new ArrayList<>();
+        if (!university.isEmpty()) parts.add(university);
+        if (!major.isEmpty()) parts.add(major);
+        parts.add("degree requirements");
+        if (!year.isEmpty()) parts.add(year);
+
+        return String.join(" ", parts);
+    }
+
+    // Aggregate resolver: try Instant Answer JSON first, then HTML results page
+    public Optional<String> resolveSearchUrl(String query) {
+        if (query == null || query.isBlank()) return Optional.empty();
+        Optional<String> viaIa = resolveFirstDuckDuckGoUrl(query);
+        if (viaIa.isPresent()) return viaIa;
+        return resolveFirstDuckDuckGoHtmlResult(query);
+    }
+
+    // Helper: resolve the first DuckDuckGo result URL for a query (Instant Answer JSON)
     public Optional<String> resolveFirstDuckDuckGoUrl(String query) {
         try {
-            RestTemplate restTemplate = new RestTemplate();
             String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
-            String url = "https://api.duckduckgo.com/?q=" + encodedQuery + "&format=json";
-            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
-            if (response != null && response.containsKey("RelatedTopics")) {
-                List<?> topics = (List<?>) response.get("RelatedTopics");
+            String url = "https://api.duckduckgo.com/?q=" + encodedQuery + "&format=json&no_html=1&no_redirect=1&skip_disambig=1";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36");
+            headers.set(HttpHeaders.ACCEPT, "application/json");
+            RestTemplate restTemplate = new RestTemplate();
+            ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+            Map<String, Object> response = resp.getBody();
+            if (response == null) return Optional.empty();
+
+            Object redirect = response.get("Redirect");
+            if (redirect instanceof String s && isValidHttpUrl(s) && !s.isBlank()) return Optional.of(s);
+
+            Object abstractUrl = response.get("AbstractURL");
+            if (abstractUrl instanceof String s && isValidHttpUrl(s) && !s.isBlank()) return Optional.of(s);
+
+            Object results = response.get("Results");
+            if (results instanceof List<?> resList) {
+                for (Object r : resList) {
+                    if (r instanceof Map<?, ?> res) {
+                        Object first = res.get("FirstURL");
+                        if (first instanceof String s && isValidHttpUrl(s)) return Optional.of(s);
+                    }
+                }
+            }
+
+            Object related = response.get("RelatedTopics");
+            if (related instanceof List<?> topics) {
                 for (Object t : topics) {
                     if (t instanceof Map<?, ?> topic) {
                         Object firstUrl = topic.get("FirstURL");
-                        if (firstUrl != null) return Optional.of(firstUrl.toString());
+                        if (firstUrl instanceof String s && isValidHttpUrl(s)) return Optional.of(s);
                         Object sub = topic.get("Topics");
                         if (sub instanceof List<?> subList) {
-                            for (Object s : subList) {
-                                if (s instanceof Map<?, ?> subTopic) {
+                            for (Object sObj : subList) {
+                                if (sObj instanceof Map<?, ?> subTopic) {
                                     Object nestedUrl = subTopic.get("FirstURL");
-                                    if (nestedUrl != null) return Optional.of(nestedUrl.toString());
+                                    if (nestedUrl instanceof String s && isValidHttpUrl(s)) return Optional.of(s);
                                 }
                             }
                         }
@@ -196,7 +268,56 @@ public class ApiController {
             }
             return Optional.empty();
         } catch (Exception e) {
+            System.err.println("DuckDuckGo IA resolve failed: " + e.getMessage());
             return Optional.empty();
+        }
+    }
+
+    // Fallback: fetch HTML results page and parse the first result URL
+    private Optional<String> resolveFirstDuckDuckGoHtmlResult(String query) {
+        try {
+            String searchUrl = "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
+            Document doc = Jsoup.connect(searchUrl)
+                .userAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36")
+                .referrer("https://duckduckgo.com/")
+                .timeout(8000)
+                .get();
+
+            // Typical selector for result anchors on the HTML page
+            for (Element a : doc.select("a.result__a[href], a.result__url[href]")) {
+                String href = a.attr("href");
+                String real = decodeDuckDuckGoRedirect(href);
+                if (isValidHttpUrl(real)) return Optional.of(real);
+            }
+            return Optional.empty();
+        } catch (Exception e) {
+            System.err.println("DuckDuckGo HTML resolve failed: " + e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    // Decode /l/?...uddg=... redirect links to the real target URL
+    private static String decodeDuckDuckGoRedirect(String href) {
+        if (href == null || href.isBlank()) return "";
+        try {
+            // https://duckduckgo.com/l/?kh=-1&uddg=<encodedTarget>
+            int q = href.indexOf('?');
+            if (q >= 0 && href.contains("uddg=")) {
+                String qs = href.substring(q + 1);
+                for (String part : qs.split("&")) {
+                    int eq = part.indexOf('=');
+                    if (eq > 0) {
+                        String k = part.substring(0, eq);
+                        String v = part.substring(eq + 1);
+                        if ("uddg".equals(k)) {
+                            return URLDecoder.decode(v, StandardCharsets.UTF_8);
+                        }
+                    }
+                }
+            }
+            return href;
+        } catch (Exception ex) {
+            return "";
         }
     }
 
@@ -206,12 +327,26 @@ public class ApiController {
         if (query == null || query.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query is required");
         }
-        String resolvedUrl = resolveFirstDuckDuckGoUrl(query)
+        String resolvedUrl = resolveSearchUrl(query)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No DuckDuckGo result URL found"));
+        if (!isValidHttpUrl(resolvedUrl)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "resolved URL is not http(s)");
+        }
         debugPrintSnapshotUrl("duckduckgo", resolvedUrl);
         byte[] pdf = pdfService.renderExpandedPageToPdf(resolvedUrl);
         return ResponseEntity.ok()
             .header("Content-Disposition", "attachment; filename=\"snapshot.pdf\"")
             .body(pdf);
+    }
+
+    // Helper to validate http(s) URLs
+    private static boolean isValidHttpUrl(String url) {
+        try {
+            URI u = URI.create(url);
+            String scheme = u.getScheme();
+            return scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")) && u.getHost() != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
