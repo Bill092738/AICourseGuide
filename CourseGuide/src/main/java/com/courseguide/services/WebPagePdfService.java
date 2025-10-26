@@ -68,6 +68,9 @@ public class WebPagePdfService {
             page.navigate(url, new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30000));
             page.waitForLoadState(LoadState.NETWORKIDLE);
 
+            System.out.println("Dismissing cookie banners and overlays...");
+            dismissOverlays(page);
+
             System.out.println("Expanding page content...");
             expandAll(page);
 
@@ -147,6 +150,127 @@ public class WebPagePdfService {
         System.out.println("==================================================");
         
         return filename;
+    }
+
+    private void dismissOverlays(Page page) {
+        // Wait a bit for cookie banners to appear
+        page.waitForTimeout(1500);
+
+        System.out.println("  Looking for cookie consent buttons...");
+        
+        // Priority 1: Look for accept/allow buttons (most common dismiss buttons)
+        String[] primaryTexts = {
+            "Accept cookies", "Accept all cookies", "Allow all", "Allow All", 
+            "Accept all", "Accept All", "Accept", "Allow"
+        };
+        boolean dismissed = false;
+        
+        for (String text : primaryTexts) {
+            try {
+                // Look for buttons/button-like elements, exclude links to policy pages
+                Locator buttons = page.locator(
+                    "button:has-text('" + text + "'):visible, " +
+                    "[role=button]:has-text('" + text + "'):visible"
+                );
+                
+                if (buttons.count() > 0) {
+                    Locator btn = buttons.first();
+                    // Make sure it's not a link that navigates away
+                    String tagName = (String) btn.evaluate("el => el.tagName.toLowerCase()");
+                    String href = null;
+                    try {
+                        href = (String) btn.evaluate("el => el.getAttribute('href')");
+                    } catch (Exception ignored) {}
+                    
+                    // Only click if it's a button or doesn't have an href
+                    if (!tagName.equals("a") || href == null || href.equals("#") || href.isEmpty()) {
+                        System.out.println("  Clicking '" + text + "' button");
+                        btn.click(new Locator.ClickOptions().setTimeout(1000));
+                        page.waitForTimeout(500);
+                        dismissed = true;
+                        break;
+                    } else {
+                        System.out.println("  Skipping '" + text + "' - it's a navigation link");
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println("  Failed to click '" + text + "': " + e.getMessage());
+            }
+        }
+
+        // Priority 2: Try the X close button
+        if (!dismissed) {
+            try {
+                System.out.println("  Looking for X close button...");
+                Locator closeButtons = page.locator(
+                    "button:has-text('×'):visible, " +
+                    "button:has-text('✕'):visible, " +
+                    "[aria-label*='lose']:visible"
+                );
+                
+                if (closeButtons.count() > 0) {
+                    System.out.println("  Clicking close (X) button");
+                    closeButtons.first().click(new Locator.ClickOptions().setTimeout(1000));
+                    page.waitForTimeout(500);
+                    dismissed = true;
+                }
+            } catch (Exception e) {
+                System.out.println("  Failed to click close button: " + e.getMessage());
+            }
+        }
+
+        // Priority 3: If still not dismissed, try other common buttons in cookie containers
+        if (!dismissed) {
+            String[] secondaryTexts = {"I agree", "OK", "Got it", "Continue", "Dismiss"};
+            for (String text : secondaryTexts) {
+                try {
+                    // Only look for actual buttons in cookie-related containers
+                    Locator buttons = page.locator(
+                        ".cookie button:has-text('" + text + "'):visible, " +
+                        ".consent button:has-text('" + text + "'):visible, " +
+                        "[class*='cookie'] button:has-text('" + text + "'):visible, " +
+                        "[id*='cookie'] button:has-text('" + text + "'):visible"
+                    );
+                    if (buttons.count() > 0) {
+                        System.out.println("  Clicking '" + text + "' button in cookie banner");
+                        buttons.first().click(new Locator.ClickOptions().setTimeout(1000));
+                        page.waitForTimeout(500);
+                        dismissed = true;
+                        break;
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        // Final cleanup: Force remove any remaining fixed/sticky overlays via JavaScript
+        System.out.println("  Force removing any remaining overlays via JavaScript...");
+        page.evaluate("() => {" +
+            "  const overlaySelectors = [" +
+            "    '.cookie-banner', '.cookie-consent', '.cookie-notice', '.cookies-overlay'," +
+            "    '.gdpr-banner', '.privacy-banner', '.consent-banner'," +
+            "    '[class*=\"cookie\"]', '[id*=\"cookie\"]'," +
+            "    '[class*=\"consent\"]', '[id*=\"consent\"]'," +
+            "    '.modal-backdrop', '[role=\"dialog\"]'" +
+            "  ];" +
+            "  overlaySelectors.forEach(selector => {" +
+            "    document.querySelectorAll(selector).forEach(el => {" +
+            "      const style = window.getComputedStyle(el);" +
+            "      if (style.position === 'fixed' || style.position === 'sticky' || style.position === 'absolute') {" +
+            "        const zIndex = parseInt(style.zIndex) || 0;" +
+            "        if (zIndex > 100) {" + // Only remove high z-index overlays
+            "          console.log('Removing overlay:', el.className, el.id);" +
+            "          el.style.display = 'none';" +
+            "          el.remove();" +
+            "        }" +
+            "      }" +
+            "    });" +
+            "  });" +
+            "  document.body.style.overflow = 'auto';" +
+            "  document.documentElement.style.overflow = 'auto';" +
+            "}");
+
+        page.waitForTimeout(500);
+        System.out.println("  Overlay dismissal complete (dismissed: " + dismissed + ")");
     }
 
     private void expandAll(Page page) {
