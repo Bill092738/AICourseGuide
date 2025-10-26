@@ -2,6 +2,10 @@
 
 A modern web app for course and career recommendations, featuring a Java Spring Boot backend and a React + TypeScript + Vite frontend.
 
+## System Architecture
+
+![System Architecture Diagram](images/system-architecture-diagram.png)
+
 ---
 
 ## Project Structure
