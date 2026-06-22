@@ -1,6 +1,6 @@
 # CourseGuide
 
-A modern web app for course and career recommendations, featuring a Java Spring Boot backend and a React + TypeScript + Vite frontend.
+A university course recommendation system with a Java Spring Boot backend, React + TypeScript + Vite frontend, and a local Llama LLM for AI-powered course planning.
 
 ## System Architecture
 
@@ -14,10 +14,9 @@ A modern web app for course and career recommendations, featuring a Java Spring 
 CourseGuide/
   frontend/                # React + TypeScript + Vite frontend
     src/
-      App.tsx
-      main.tsx
-      ...
-    public/
+      App.tsx              # Main UI (Tailwind CSS, includes workflow panel)
+      main.tsx             # Entry point
+      App.css              # Minimal reset styles
     index.html
     package.json
     ...
@@ -25,7 +24,7 @@ CourseGuide/
     App.java               # Spring Boot entrypoint
     ApiController.java     # Main API endpoints
     processors/            # Recommendation and data processors
-    services/              # File storage and related services
+    services/              # Web scraping, LLM, PDF extraction, file storage
     dto/                   # Data transfer objects (records, enums)
     utils/                 # Utility classes
     ...
@@ -41,9 +40,8 @@ CourseGuide/
 - Node.js 18+ and npm (frontend development)
 - Maven 3.6+ (backend build)
 - MySQL 8.0+ (course database and prerequisite DAG)
-- Llama API Server running on http://localhost:8075 (LLM analysis)
-- Optional
-- Playwright (auto-installed by Maven for web scraping)
+- Llama API Server running on http://localhost:8075 (local LLM analysis)
+- Optional: Playwright (auto-installed by Maven for web scraping)
 
 ---
 
@@ -87,7 +85,21 @@ CourseGuide/
 
 ## Usage
 
-- Open [http://localhost:5173](http://localhost:5173) for the modern React frontend.
+- Open [http://localhost:5173](http://localhost:5173) for the React frontend.
+- Click **"How it works — AI Workflow"** to see the 6-step pipeline explanation.
+
+---
+
+## AI Workflow
+
+The app runs a 6-step AI pipeline when you submit a request:
+
+1. **Student Profile** — Collects university, major, degree level, graduation year, and progress PDF
+2. **Web Search** — Queries DuckDuckGo for the university's degree requirements page
+3. **Page Scraping** — Uses Playwright to render the page to a PDF snapshot
+4. **PDF Text Extraction** — Extracts text from degree requirements and progress PDFs
+5. **LLM Analysis** — Sends text to a local Llama model which generates a CSV course plan
+6. **Course Selection** — Parses the CSV, builds a prerequisite graph, and selects up to 6 courses
 
 ---
 
@@ -103,6 +115,7 @@ CourseGuide/
 ## Linting & Formatting
 
 - Frontend uses ESLint (see [`frontend/eslint.config.js`](CourseGuide/frontend/eslint.config.js))
-- Prettier or other formatting tools can be added as needed.
+- Styling uses Tailwind CSS (loaded via CDN in `index.html`)
+- Run `npm run lint` from `CourseGuide/frontend/` to check for issues
 
 ---

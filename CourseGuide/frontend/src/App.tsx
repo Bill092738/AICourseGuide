@@ -243,59 +243,105 @@ export default function App() {
     }
   }
 
-  // Spinner component for loading animation
+  const spinnerFrames = ['/', '—', '\\', '|']
+
+  const workflowSteps = [
+    { step: 1, title: "Student Profile", description: "Collect university, major, degree level, graduation year, and uploaded progress PDF." },
+    { step: 2, title: "Web Search", description: "Search DuckDuckGo for the university's degree requirements page." },
+    { step: 3, title: "Page Scraping", description: "Use Playwright to load the page, dismiss overlays, and render it to a PDF snapshot." },
+    { step: 4, title: "PDF Text Extraction", description: "Extract text from degree requirements and student progress PDFs." },
+    { step: 5, title: "LLM Analysis", description: "Send text to a local Llama model which generates a CSV course plan." },
+    { step: 6, title: "Course Selection", description: "Parse the CSV, build a prerequisite graph, and select up to 6 courses within credit limits." },
+  ]
+
+  function WorkflowPanel() {
+    const [open, setOpen] = useState(false)
+
+    return (
+      <section className="mb-6">
+        <button
+          onClick={() => setOpen(!open)}
+          className="w-full text-left bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex items-center justify-between hover:bg-gray-50"
+        >
+          <h2 className="text-lg font-semibold text-gray-700">How it works — AI Workflow</h2>
+          <span className="text-gray-400 text-xl">{open ? '\u2212' : '+'}</span>
+        </button>
+        {open && (
+          <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-4">
+            <ol className="space-y-4">
+              {workflowSteps.map((s) => (
+                <li key={s.step} className="flex gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">
+                    {s.step}
+                  </span>
+                  <div>
+                    <h3 className="font-medium text-gray-900">{s.title}</h3>
+                    <p className="text-sm text-gray-500">{s.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </section>
+    )
+  }
+
   function Spinner() {
     const [frame, setFrame] = useState(0)
-    const frames = ['/', '—', '\\', '|']
-    
-    // Fix: Change useState to useEffect
+
     useEffect(() => {
       const interval = setInterval(() => {
-        setFrame(prev => (prev + 1) % frames.length)
+        setFrame(prev => (prev + 1) % spinnerFrames.length)
       }, 150)
       return () => clearInterval(interval)
-    }, []) // Add empty dependency array
-    
-    return <span className="inline-block w-4">{frames[frame]}</span>
+    }, [])
+
+    return <span className="inline-block w-4">{spinnerFrames[frame]}</span>
   }
 
   return (
-    <div className="page">
-      <div className="container">
-        <header className="mb8">
-          <h1 className="h1">CourseGuide</h1>
-          <p className="muted">Get simple recommendations based on your profile and goals.</p>
+    <div className="bg-gray-50 text-gray-900 min-h-screen">
+      <div className="max-w-3xl mx-auto px-6 py-6">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold">CourseGuide</h1>
+          <p className="text-gray-500">Get simple recommendations based on your profile and goals.</p>
         </header>
 
-        <section className="card">
-          <h2 className="h2">User basic info</h2>
-          <div className="field">
-            <label htmlFor="university">University</label>
+        <WorkflowPanel />
+
+        <section className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+          <h2 className="text-xl font-semibold mb-3">User basic info</h2>
+          <div className="mb-3">
+            <label htmlFor="university" className="block text-sm font-medium text-gray-700 mb-1">University</label>
             <input
               id="university"
               type="text"
               placeholder='e.g., "The Ohio State University"'
               value={form.university}
               onChange={onChange("university")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           </div>
-          <div className="field">
-            <label htmlFor="major">Major</label>
+          <div className="mb-3">
+            <label htmlFor="major" className="block text-sm font-medium text-gray-700 mb-1">Major</label>
             <input
               id="major"
               type="text"
               placeholder="e.g., Computer Science"
               value={form.major}
               onChange={onChange("major")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           </div>
-          <div className="grid2">
-            <div className="field">
-              <label htmlFor="degreeLevel">Degree level</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="mb-3">
+              <label htmlFor="degreeLevel" className="block text-sm font-medium text-gray-700 mb-1">Degree level</label>
               <select
                 id="degreeLevel"
                 value={form.degreeLevel}
                 onChange={onChange("degreeLevel")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               >
                 <option value="" disabled>
                   Select
@@ -304,8 +350,8 @@ export default function App() {
                 <option value="Graduate">Graduate</option>
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="graduationYear">Graduation year</label>
+            <div className="mb-3">
+              <label htmlFor="graduationYear" className="block text-sm font-medium text-gray-700 mb-1">Graduation year</label>
               <input
                 id="graduationYear"
                 type="number"
@@ -314,18 +360,19 @@ export default function App() {
                 placeholder="e.g., 2027"
                 value={form.graduationYear === "" ? "" : form.graduationYear}
                 onChange={onChange("graduationYear")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
             </div>
           </div>
         </section>
 
-        <section className="card mt6">
-          <h2 className="h2">Current progress</h2>
-          <p className="muted">
+        <section className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm mt-6">
+          <h2 className="text-xl font-semibold mb-3">Current progress</h2>
+          <p className="text-gray-500">
             Upload a single PDF that includes: current courses, completed courses, and any transfer credits.
           </p>
-          <div className="field">
-            <label htmlFor="progressPdf">Progress PDF</label>
+          <div className="mb-3">
+            <label htmlFor="progressPdf" className="block text-sm font-medium text-gray-700 mb-1">Progress PDF</label>
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3">
                 <input
@@ -378,54 +425,58 @@ export default function App() {
           </div>
         </section>
 
-        <section className="card mt6">
-          <h2 className="h2">Target or goal</h2>
-          <div className="field">
-            <label htmlFor="targetMajor">Target major</label>
+        <section className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm mt-6">
+          <h2 className="text-xl font-semibold mb-3">Target or goal</h2>
+          <div className="mb-3">
+            <label htmlFor="targetMajor" className="block text-sm font-medium text-gray-700 mb-1">Target major</label>
             <input
               id="targetMajor"
               type="text"
               placeholder="e.g., Computer & Information Science"
               value={form.targetMajor}
               onChange={onChange("targetMajor")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           </div>
-          <div className="field">
-            <label htmlFor="targetMinor">Target minor (optional)</label>
+          <div className="mb-3">
+            <label htmlFor="targetMinor" className="block text-sm font-medium text-gray-700 mb-1">Target minor (optional)</label>
             <input
               id="targetMinor"
               type="text"
               placeholder="e.g., Mathematics"
               value={form.targetMinor}
               onChange={onChange("targetMinor")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           </div>
-          <div className="field">
-            <label htmlFor="planName">Plan name</label>
+          <div className="mb-3">
+            <label htmlFor="planName" className="block text-sm font-medium text-gray-700 mb-1">Plan name</label>
             <input
               id="planName"
               type="text"
               placeholder='e.g., "BS CIS 2023-2024"'
               value={form.planName}
               onChange={onChange("planName")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           </div>
-          <div className="field">
-            <label htmlFor="preferredElectives">Preferred electives (comma-separated)</label>
+          <div className="mb-3">
+            <label htmlFor="preferredElectives" className="block text-sm font-medium text-gray-700 mb-1">Preferred electives (comma-separated)</label>
             <input
               id="preferredElectives"
               type="text"
               placeholder='e.g., AI, Data Science, Systems'
               value={form.preferredElectives}
               onChange={onChange("preferredElectives")}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           </div>
 
-          <fieldset className="fieldset">
-            <legend>Constraints</legend>
-            <div className="grid2">
-              <div className="field">
-                <label htmlFor="maxCreditHour">Max credit hours</label>
+          <fieldset className="border border-gray-200 rounded-lg p-3 mt-2">
+            <legend className="text-sm font-medium text-gray-700 px-1.5">Constraints</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="mb-3">
+                <label htmlFor="maxCreditHour" className="block text-sm font-medium text-gray-700 mb-1">Max credit hours</label>
                 <input
                   id="maxCreditHour"
                   type="number"
@@ -434,24 +485,26 @@ export default function App() {
                   placeholder="e.g., 18"
                   value={form.maxCreditHour === "" ? "" : form.maxCreditHour}
                   onChange={onChange("maxCreditHour")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                 />
               </div>
-              <div className="field">
-                <label htmlFor="semester">Semester</label>
+              <div className="mb-3">
+                <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
                 <input
                   id="semester"
                   type="text"
                   placeholder='e.g., "Spring 2026"'
                   value={form.semester}
                   onChange={onChange("semester")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                 />
               </div>
             </div>
           </fieldset>
 
-          <div className="grid2">
-            <div className="field">
-              <label htmlFor="gpa">GPA</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="mb-3">
+              <label htmlFor="gpa" className="block text-sm font-medium text-gray-700 mb-1">GPA</label>
               <input
                 id="gpa"
                 type="number"
@@ -461,12 +514,13 @@ export default function App() {
                 placeholder="e.g., 3.7"
                 value={form.gpa === "" ? "" : form.gpa}
                 onChange={onChange("gpa")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
             </div>
             <div />
           </div>
 
-          <div className="actions">
+          <div className="flex gap-3 pt-3 items-center">
             <button
               type="button"
               onClick={submit}
@@ -483,7 +537,7 @@ export default function App() {
               Health
             </a>
           </div>
-          {status && <p className="status">{status}</p>}
+          {status && <p className="text-sm text-gray-500 mt-2">{status}</p>}
         </section>
 
         {/* Terminal Display - Add this before recommendations section */}
@@ -520,9 +574,9 @@ export default function App() {
           </section>
         )}
 
-        <section className="mt6">
-          <h2 className="h2 mb2">Recommendations</h2>
-          <ul className="list">
+        <section className="mt-6">
+          <h2 className="text-xl font-semibold mb-2">Recommendations</h2>
+          <ul className="list-disc pl-5">
             {results.map((item, idx) => (
               <li key={idx}>{item}</li>
             ))}
