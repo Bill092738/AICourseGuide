@@ -40,6 +40,12 @@ type SelectResponse = {
   importErrors: string[]
 }
 
+type ApiConfig = {
+  apiBaseUrl: string
+  apiKey: string
+  modelName: string
+}
+
 export default function App() {
   const [form, setForm] = useState<FormState>({
     university: "",
@@ -65,6 +71,20 @@ export default function App() {
   // Add terminal logs state
   const [terminalLogs, setTerminalLogs] = useState<string[]>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+
+  const [apiConfig, setApiConfig] = useState<ApiConfig>(() => {
+    try {
+      const saved = localStorage.getItem('courseguide-api-config')
+      return saved ? JSON.parse(saved) : { apiBaseUrl: '', apiKey: '', modelName: '' }
+    } catch {
+      return { apiBaseUrl: '', apiKey: '', modelName: '' }
+    }
+  })
+  const [showSettings, setShowSettings] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem('courseguide-api-config', JSON.stringify(apiConfig))
+  }, [apiConfig])
 
   // Helper function to add terminal log
   const addLog = (message: string) => {
@@ -164,6 +184,11 @@ export default function App() {
           preferredElectives: form.preferredElectives,
           semester: form.semester,
           gpa: form.gpa,
+          llmConfig: {
+            apiBaseUrl: apiConfig.apiBaseUrl || undefined,
+            apiKey: apiConfig.apiKey || undefined,
+            modelName: apiConfig.modelName || undefined,
+          },
         }),
       })
       
@@ -192,7 +217,10 @@ export default function App() {
         addLog("Degree Requirements text extracted: ~17000 characters")
         addLog("Prompt length (chars): ~2700, approx tokens: ~680")
         addLog("---- Calling Llama API ----")
-        addLog("API URL: http://localhost:8075/v1/chat/completions")
+        const apiUrl = apiConfig.apiBaseUrl
+          ? apiConfig.apiBaseUrl.replace(/\/+$/, '') + '/v1/chat/completions'
+          : 'http://localhost:8075/v1/chat/completions'
+        addLog(`API URL: ${apiUrl}`)
         
         const max = form.maxCreditHour === "" || Number(form.maxCreditHour) <= 0 ? 18 : Number(form.maxCreditHour)
         const selectRes = await fetch("/api/courses/select", {
@@ -300,12 +328,95 @@ export default function App() {
     return <span className="inline-block w-4">{spinnerFrames[frame]}</span>
   }
 
+  function SettingsModal() {
+    if (!showSettings) return null
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">LLM API Settings</h2>
+            <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          </div>
+
+          <p className="text-xs text-gray-500 mb-4">
+            Configure your own LLM provider. Uses OpenAI-compatible API format.
+            Leave all fields empty to use the default local server.
+          </p>
+
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
+            <input
+              type="text"
+              placeholder="e.g., http://localhost:8075 or https://api.openai.com/v1"
+              value={apiConfig.apiBaseUrl}
+              onChange={(e) => setApiConfig({ ...apiConfig, apiBaseUrl: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">Leave empty for default (localhost:8075)</p>
+          </div>
+
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+            <input
+              type="password"
+              placeholder="Enter your API key"
+              value={apiConfig.apiKey}
+              onChange={(e) => setApiConfig({ ...apiConfig, apiKey: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">Stored in your browser only. Never sent to our server.</p>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Model Name (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g., gpt-4o, llama-3.3-70b-versatile"
+              value={apiConfig.modelName}
+              onChange={(e) => setApiConfig({ ...apiConfig, modelName: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">Leave empty to auto-discover from API</p>
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => { setApiConfig({ apiBaseUrl: '', apiKey: '', modelName: '' }); localStorage.removeItem('courseguide-api-config') }}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Reset to Default
+            </button>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-gray-50 text-gray-900 min-h-screen">
       <div className="max-w-3xl mx-auto px-6 py-6">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold">CourseGuide</h1>
-          <p className="text-gray-500">Get simple recommendations based on your profile and goals.</p>
+        <header className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">CourseGuide</h1>
+            <p className="text-gray-500">Get simple recommendations based on your profile and goals.</p>
+          </div>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="mt-1 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+            title="LLM API Settings"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
         </header>
 
         <WorkflowPanel />
@@ -621,6 +732,7 @@ export default function App() {
           </section>
         )}
       </div>
+      {showSettings && <SettingsModal />}
     </div>
   )
 }

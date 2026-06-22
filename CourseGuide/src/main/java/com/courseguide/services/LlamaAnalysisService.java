@@ -5,6 +5,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.courseguide.dto.LlmConfig;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,6 +43,10 @@ public class LlamaAnalysisService {
     }
 
     public String analyzeAndGenerateCoursePlan(Map<String, Object> studentInfo, Path snapshotPdf, Path progressPdf) {
+        return analyzeAndGenerateCoursePlan(studentInfo, snapshotPdf, progressPdf, null);
+    }
+
+    public String analyzeAndGenerateCoursePlan(Map<String, Object> studentInfo, Path snapshotPdf, Path progressPdf, LlmConfig config) {
         System.out.println("---- Starting LLM Analysis ----");
         
         // Extract text from both PDFs
@@ -48,7 +54,7 @@ public class LlamaAnalysisService {
         String studentProgress = extractPdfText(progressPdf, "Student Progress");
         
         String prompt = buildPrompt(studentInfo, degreeRequirements, studentProgress);
-        String llmResponse = callLlamaApi(prompt);
+        String llmResponse = callLlamaApi(prompt, config);
         String csvFilePath = saveCsvOutput(llmResponse, studentInfo);
         
         System.out.println("---- LLM Analysis Complete ----");
@@ -141,14 +147,11 @@ public class LlamaAnalysisService {
         return s.substring(0, head) + "\n\n...[TRIMMED]...\n\n" + s.substring(s.length() - tail);
     }
 
-    private volatile String resolvedModelId;
-
-    // Resolve the model id from llama-server (/v1/models)
-    private String resolveModelId(RestTemplate restTemplate, HttpHeaders headers) {
-        if (resolvedModelId != null && !resolvedModelId.isBlank()) return resolvedModelId;
+    // Resolve the model id from the provider's /v1/models endpoint
+    private String resolveModelId(RestTemplate restTemplate, HttpHeaders headers, String modelsUrl) {
         try {
             HttpEntity<Void> entity = new HttpEntity<>(headers);
-            ResponseEntity<Map> resp = restTemplate.exchange(LLAMA_MODELS_URL, HttpMethod.GET, entity, Map.class);
+            ResponseEntity<Map> resp = restTemplate.exchange(modelsUrl, HttpMethod.GET, entity, Map.class);
             Map body = resp.getBody();
             if (body != null && body.containsKey("data")) {
                 @SuppressWarnings("unchecked")
@@ -156,33 +159,47 @@ public class LlamaAnalysisService {
                 if (data != null && !data.isEmpty()) {
                     String id = Objects.toString(data.get(0).get("id"), "");
                     if (!id.isBlank()) {
-                        resolvedModelId = id;
-                        System.out.println("Resolved llama model id: " + resolvedModelId);
-                        return resolvedModelId;
+                        System.out.println("Resolved model id: " + id);
+                        return id;
                     }
                 }
             }
         } catch (Exception e) {
             System.err.println("Failed to resolve model id: " + e.getMessage());
         }
-        // Conservative fallbacks
-        resolvedModelId = "qwen"; // try model family name
-        return resolvedModelId;
+        return "qwen";
     }
 
-    private String callLlamaApi(String prompt) {
-        System.out.println("---- Calling Llama API ----");
-        System.out.println("API URL: " + LLAMA_API_URL);
+    private String callLlamaApi(String prompt, LlmConfig config) {
+        String baseUrl = (config != null && config.apiBaseUrl() != null && !config.apiBaseUrl().isBlank())
+            ? config.apiBaseUrl().replaceAll("/+$", "")
+            : "http://localhost:8075";
+
+        String apiKey = (config != null && config.apiKey() != null && !config.apiKey().isBlank())
+            ? config.apiKey()
+            : LLAMA_API_KEY;
+
+        String chatUrl = baseUrl + "/v1/chat/completions";
+        String modelsUrl = baseUrl + "/v1/models";
+
+        System.out.println("---- Calling LLM API ----");
+        System.out.println("API URL: " + chatUrl);
         System.out.println("Sending prompt chars: " + prompt.length());
         try {
             RestTemplate restTemplate = new RestTemplate();
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Bearer " + LLAMA_API_KEY);
-            headers.set("X-Api-Key", LLAMA_API_KEY);
+            headers.set("Authorization", "Bearer " + apiKey);
+            headers.set("X-Api-Key", apiKey);
 
-            String modelId = resolveModelId(restTemplate, headers);
+            String modelId;
+            if (config != null && config.modelName() != null && !config.modelName().isBlank()) {
+                modelId = config.modelName();
+                System.out.println("Using user-provided model: " + modelId);
+            } else {
+                modelId = resolveModelId(restTemplate, headers, modelsUrl);
+            }
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelId);
@@ -197,7 +214,7 @@ public class LlamaAnalysisService {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
             ResponseEntity<Map> response = restTemplate.exchange(
-                LLAMA_API_URL, HttpMethod.POST, entity, Map.class
+                chatUrl, HttpMethod.POST, entity, Map.class
             );
 
             Map<String, Object> responseBody = response.getBody();
