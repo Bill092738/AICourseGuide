@@ -8,28 +8,50 @@ A university course recommendation system with a Java Spring Boot backend, React
 
 ---
 
+## Quick Start
+
+One command to build and run everything:
+
+```sh
+./start.sh
+```
+
+This will:
+1. Check that Java, Maven, Node.js, and npm are installed
+2. Build the backend (`mvn clean package`)
+3. Start the Spring Boot backend on `http://localhost:8080`
+4. Install frontend dependencies (if needed)
+5. Start the Vite dev server on `http://localhost:5173`
+6. Print the URLs and wait — press `Ctrl+C` to stop all services
+
+---
+
 ## Project Structure
 
 ```
-CourseGuide/
-  frontend/                # React + TypeScript + Vite frontend
-    src/
-      App.tsx              # Main UI (Tailwind CSS, includes workflow panel)
-      main.tsx             # Entry point
-      App.css              # Minimal reset styles
-    index.html
-    package.json
+AICourseGuide/
+  start.sh                 # One-command startup script
+  README.md
+  images/
+  CourseGuide/
+    frontend/              # React + TypeScript + Vite frontend
+      src/
+        App.tsx            # Main UI (Tailwind CSS, settings modal, workflow panel)
+        main.tsx           # Entry point
+        App.css            # Minimal reset styles
+      index.html
+      package.json
+      ...
+    src/main/java/com/courseguide/
+      App.java             # Spring Boot entrypoint
+      ApiController.java   # Main API endpoints
+      processors/          # Recommendation and data processors
+      services/            # Web scraping, LLM, PDF extraction, file storage
+      dto/                 # Data transfer objects (records, enums)
+      utils/               # Utility classes
+      ...
+    pom.xml                # Maven build file
     ...
-  src/main/java/com/courseguide/
-    App.java               # Spring Boot entrypoint
-    ApiController.java     # Main API endpoints
-    processors/            # Recommendation and data processors
-    services/              # Web scraping, LLM, PDF extraction, file storage
-    dto/                   # Data transfer objects (records, enums)
-    utils/                 # Utility classes
-    ...
-  pom.xml                  # Maven build file
-  ...
 ```
 
 ---
@@ -87,6 +109,21 @@ CourseGuide/
 
 - Open [http://localhost:5173](http://localhost:5173) for the React frontend.
 - Click **"How it works — AI Workflow"** to see the 6-step pipeline explanation.
+- Click the **gear icon** (top-right) to configure your own LLM API.
+
+---
+
+## LLM API Settings
+
+The app supports user-defined LLM providers via the settings modal (gear icon in the header).
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| API Base URL | OpenAI-compatible endpoint (e.g., `https://api.openai.com/v1`) | `http://localhost:8075` |
+| API Key | Your provider's API key (stored in browser localStorage only) | — |
+| Model Name | Model identifier (e.g., `gpt-4o`, `llama-3.3-70b-versatile`) | Auto-discovered |
+
+Works with any OpenAI-compatible provider: OpenAI, Groq, Together AI, local llama.cpp, Ollama, etc.
 
 ---
 

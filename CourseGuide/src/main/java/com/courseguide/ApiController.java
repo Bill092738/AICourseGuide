@@ -2,6 +2,7 @@ package com.courseguide;
 
 import com.courseguide.dto.StudentProfile;
 import com.courseguide.dto.UserBasicInfo;
+import com.courseguide.dto.LlmConfig;
 import com.courseguide.processors.RecommendationEngine;
 import com.courseguide.services.FileStorageService;
 import com.courseguide.services.WebPagePdfService;
@@ -80,6 +81,17 @@ public class ApiController {
             studentInfo.put(entry.getKey(), entry.getValue() == null ? "" : entry.getValue().toString());
         }
 
+        // Extract optional LLM config from request body
+        LlmConfig llmConfig = null;
+        Object llmConfigObj = body.get("llmConfig");
+        if (llmConfigObj instanceof Map<?, ?> map) {
+            llmConfig = new LlmConfig(
+                (String) map.get("apiBaseUrl"),
+                (String) map.get("apiKey"),
+                (String) map.get("modelName")
+            );
+        }
+
         // Call debug function to print all info
         printStudentInfo(studentInfo);
         String sentence = sentenceGeneration(studentInfo);
@@ -121,7 +133,7 @@ public class ApiController {
                     }
 
                     System.out.println("---- Triggering LLM Analysis ----");
-                    coursePlanCsvPath = llamaAnalysisService.analyzeAndGenerateCoursePlan(studentInfo, snapshotPdf, progressPdf);
+                    coursePlanCsvPath = llamaAnalysisService.analyzeAndGenerateCoursePlan(studentInfo, snapshotPdf, progressPdf, llmConfig);
                     System.out.println("---- LLM Analysis Done ----");
                 } catch (Exception llmEx) {
                     System.err.println("LLM analysis failed: " + llmEx.getMessage());
@@ -207,7 +219,7 @@ public class ApiController {
                     }
                     
                     // Call LLM with both PDFs
-                    coursePlanCsvPath = llamaAnalysisService.analyzeAndGenerateCoursePlan(info, snapshotPdf, progressPdf);
+                    coursePlanCsvPath = llamaAnalysisService.analyzeAndGenerateCoursePlan(info, snapshotPdf, progressPdf, profile.llmConfig());
                 }
             } catch (Exception ex) {
                 System.err.println("PDF/LLM analysis failed: " + ex.getMessage());
