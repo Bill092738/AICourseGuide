@@ -20,7 +20,7 @@ type FormState = {
 
 type RecommendationsResponse = {
   recommendations?: string[]
-  coursePlanCsvPath?: string
+  coursePlanXmlPath?: string
   coursePlanAvailable?: boolean
   [k: string]: unknown
 }
@@ -208,7 +208,7 @@ export default function App() {
       const data: RecommendationsResponse = await res.json()
       setResults(data.recommendations ?? [])
 
-      if (data.coursePlanAvailable && data.coursePlanCsvPath) {
+      if (data.coursePlanAvailable && data.coursePlanXmlPath) {
         addLog("---- PDF generation completed successfully ----")
         addLog("---- Triggering LLM Analysis ----")
         setIsAnalyzing(true) // Start spinner animation
@@ -227,7 +227,7 @@ export default function App() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            coursePlanCsvPath: data.coursePlanCsvPath,
+            coursePlanXmlPath: data.coursePlanXmlPath,
             maxCredits: max,
             completedCourses: [] as string[],
           }),
@@ -250,10 +250,10 @@ export default function App() {
         )
         setImportErrors(userFriendlyErrors)
         
-        addLog("---- Processing LLM Response for CSV ----")
-        addLog(`Extracted CSV content: ${sel.courses?.length ?? 0} courses`)
+        addLog("---- Processing LLM Response for XML ----")
+        addLog(`Extracted XML content: ${sel.courses?.length ?? 0} courses`)
         addLog("---- LLM Analysis Complete ----")
-        addLog(`CSV saved to: ${data.coursePlanCsvPath}`)
+        addLog(`XML saved to: ${data.coursePlanXmlPath}`)
         addLog("---- End ----")
         addLog(`✨ Selected ${sel.courses?.length ?? 0} courses (${sel.totalCredits ?? 0} credits)`)
       } else {
@@ -278,8 +278,8 @@ export default function App() {
     { step: 2, title: "Web Search", description: "Search DuckDuckGo for the university's degree requirements page." },
     { step: 3, title: "Page Scraping", description: "Use Playwright to load the page, dismiss overlays, and render it to a PDF snapshot." },
     { step: 4, title: "PDF Text Extraction", description: "Extract text from degree requirements and student progress PDFs." },
-    { step: 5, title: "LLM Analysis", description: "Send text to a local Llama model which generates a CSV course plan." },
-    { step: 6, title: "Course Selection", description: "Parse the CSV, build a prerequisite graph, and select up to 6 courses within credit limits." },
+    { step: 5, title: "LLM Analysis", description: "Send text to a local Llama model which generates an XML course plan." },
+    { step: 6, title: "Course Selection", description: "Parse the XML, build a prerequisite graph, and select up to 6 courses within credit limits." },
   ]
 
   function WorkflowPanel() {

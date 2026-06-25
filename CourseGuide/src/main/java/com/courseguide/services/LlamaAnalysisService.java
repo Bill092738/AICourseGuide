@@ -20,7 +20,7 @@ public class LlamaAnalysisService {
     private static final String LLAMA_API_URL    = "http://localhost:8075/v1/chat/completions";
     private static final String LLAMA_MODELS_URL = "http://localhost:8075/v1/models";
     private static final String LLAMA_API_KEY    = System.getenv().getOrDefault("LLAMA_API_KEY", "KEY");
-    private final Path csvOutputDir;
+    private final Path xmlOutputDir;
 
     // Tighten prompt limits
     private static final int MAX_SECTION_CHARS = 2000; // was 12000
@@ -31,14 +31,14 @@ public class LlamaAnalysisService {
 
     public LlamaAnalysisService() throws IOException {
         Path workspaceRoot = Paths.get(System.getProperty("user.dir"));
-        this.csvOutputDir = workspaceRoot.resolve("course-plans");
+        this.xmlOutputDir = workspaceRoot.resolve("course-plans");
         
-        if (!Files.exists(csvOutputDir)) {
-            Files.createDirectories(csvOutputDir);
+        if (!Files.exists(xmlOutputDir)) {
+            Files.createDirectories(xmlOutputDir);
         }
         
-        System.out.println("---- CSV Output directory initialized ----");
-        System.out.println("Location: " + csvOutputDir.toAbsolutePath());
+        System.out.println("---- XML Output directory initialized ----");
+        System.out.println("Location: " + xmlOutputDir.toAbsolutePath());
         System.out.println("---- End ----");
     }
 
@@ -55,13 +55,13 @@ public class LlamaAnalysisService {
         
         String prompt = buildPrompt(studentInfo, degreeRequirements, studentProgress);
         String llmResponse = callLlamaApi(prompt, config);
-        String csvFilePath = saveCsvOutput(llmResponse, studentInfo);
+        String xmlFilePath = saveXmlOutput(llmResponse, studentInfo);
         
         System.out.println("---- LLM Analysis Complete ----");
-        System.out.println("CSV saved to: " + csvFilePath);
+        System.out.println("XML saved to: " + xmlFilePath);
         System.out.println("---- End ----");
         
-        return csvFilePath;
+        return xmlFilePath;
     }
 
     private String extractPdfText(Path pdfPath, String pdfType) {
@@ -112,12 +112,20 @@ public class LlamaAnalysisService {
         prompt.append("- Output ONLY the remaining courses that still need to be taken\n\n");
 
         prompt.append("Output Format Requirements:\n");
-        prompt.append("1. Output ONLY CSV data, no explanations or headers\n");
-        prompt.append("2. Each line represents ONE course\n");
+        prompt.append("1. Output ONLY XML data, no explanations or markdown\n");
+        prompt.append("2. Each <course> element represents ONE course\n");
         prompt.append("3. Order courses from MOST RECENT (top) to LAST needed (bottom)\n");
         prompt.append("4. Consider prerequisites - earlier courses must come before advanced courses\n");
-        prompt.append("5. Strictly follow this CSV format:\n");
-        prompt.append("   CourseName,PreqCourseName,CreditHours,Major1/Major2/GenedEdu/Minor,Description\n\n");
+        prompt.append("5. Strictly follow this XML format:\n");
+        prompt.append("   <coursePlan>\n");
+        prompt.append("     <course>\n");
+        prompt.append("       <name>Course Name</name>\n");
+        prompt.append("       <prerequisites>Prereq1;Prereq2</prerequisites>\n");
+        prompt.append("       <creditHours>3</creditHours>\n");
+        prompt.append("       <category>Major1/Major2/GenedEdu/Minor</category>\n");
+        prompt.append("       <description>Course description</description>\n");
+        prompt.append("     </course>\n");
+        prompt.append("   </coursePlan>\n\n");
         prompt.append("Now generate the course plan:\n");
 
         String out = prompt.toString();
@@ -204,7 +212,7 @@ public class LlamaAnalysisService {
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelId);
             requestBody.put("messages", List.of(
-                Map.of("role", "system", "content", "You are a helpful course planning assistant. Output only CSV formatted data."),
+                Map.of("role", "system", "content", "You are a helpful course planning assistant. Output only XML formatted data."),
                 Map.of("role", "user", "content", prompt)
             ));
             requestBody.put("temperature", 0.2);
@@ -259,74 +267,73 @@ public class LlamaAnalysisService {
         }
     }
 
-    private String saveCsvOutput(String llmResponse, Map<String, Object> studentInfo) {
+    private String saveXmlOutput(String llmResponse, Map<String, Object> studentInfo) {
         try {
-            System.out.println("---- Processing LLM Response for CSV ----");
+            System.out.println("---- Processing LLM Response for XML ----");
             System.out.println("Raw response length: " + (llmResponse != null ? llmResponse.length() : 0));
             
-            // Clean up the response to extract only CSV content
-            String csvContent = extractCsvFromResponse(llmResponse);
+            // Clean up the response to extract only XML content
+            String xmlContent = extractXmlFromResponse(llmResponse);
             
-            System.out.println("Extracted CSV content length: " + csvContent.length());
-            System.out.println("Extracted CSV content:\n" + csvContent);
+            System.out.println("Extracted XML content length: " + xmlContent.length());
+            System.out.println("Extracted XML content:\n" + xmlContent);
             
-            if (csvContent.isEmpty() || csvContent.isBlank()) {
-                System.err.println("WARNING: LLM returned no CSV content!");
+            if (xmlContent.isEmpty() || xmlContent.isBlank()) {
+                System.err.println("WARNING: LLM returned no XML content!");
                 System.err.println("Original response: " + llmResponse);
                 // Return empty path but don't throw exception
                 return "";
             }
             
-            // Add CSV header
-            String csvWithHeader = "CourseName,PreqCourseName,CreditHours,Category,Description\n" + csvContent;
-            
             // Generate filename with timestamp
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmms"));
             String major = Objects.toString(studentInfo.getOrDefault("major", "Unknown"), "Unknown")
                 .replaceAll("[^a-zA-Z0-9]", "_");
-            String filename = "course_plan_" + major + "_" + timestamp + ".csv";
+            String filename = "course_plan_" + major + "_" + timestamp + ".xml";
             
-            Path csvFile = csvOutputDir.resolve(filename);
-            Files.writeString(csvFile, csvWithHeader);
+            Path xmlFile = xmlOutputDir.resolve(filename);
+            Files.writeString(xmlFile, xmlContent);
             
             System.out.println("==================================================");
-            System.out.println("     COURSE PLAN CSV SAVED SUCCESSFULLY");
+            System.out.println("     COURSE PLAN XML SAVED SUCCESSFULLY");
             System.out.println("==================================================");
             System.out.println("Filename:     " + filename);
-            System.out.println("Full Path:    " + csvFile.toAbsolutePath());
-            System.out.println("Size:         " + csvWithHeader.length() + " bytes");
-            System.out.println("Lines:        " + (csvContent.split("\n").length + 1));
+            System.out.println("Full Path:    " + xmlFile.toAbsolutePath());
+            System.out.println("Size:         " + xmlContent.length() + " bytes");
+            System.out.println("Lines:        " + xmlContent.split("\n").length);
             System.out.println("==================================================");
             
-            return csvFile.toAbsolutePath().toString();
+            return xmlFile.toAbsolutePath().toString();
             
         } catch (IOException e) {
-            System.err.println("Failed to save CSV: " + e.getMessage());
-            throw new RuntimeException("Failed to save CSV output", e);
+            System.err.println("Failed to save XML: " + e.getMessage());
+            throw new RuntimeException("Failed to save XML output", e);
         }
     }
 
-    private String extractCsvFromResponse(String response) {
+    private String extractXmlFromResponse(String response) {
         // Remove any markdown code blocks
-        String cleaned = response.replaceAll("```csv\\s*", "")
+        String cleaned = response.replaceAll("```xml\\s*", "")
                                 .replaceAll("```\\s*", "")
                                 .trim();
         
-        // Split into lines and filter out any non-CSV lines
-        String[] lines = cleaned.split("\n");
-        StringBuilder csvBuilder = new StringBuilder();
+        // Try to extract XML content between <coursePlan> tags
+        int startIndex = cleaned.indexOf("<coursePlan>");
+        int endIndex = cleaned.indexOf("</coursePlan>");
         
-        for (String line : lines) {
-            line = line.trim();
-            // Check if line looks like CSV (has commas and content)
-            if (!line.isEmpty() && line.contains(",") && !line.startsWith("#")) {
-                // Skip header lines that might have been included
-                if (!line.toLowerCase().startsWith("coursename,")) {
-                    csvBuilder.append(line).append("\n");
-                }
+        if (startIndex >= 0 && endIndex >= 0) {
+            return cleaned.substring(startIndex, endIndex + "</coursePlan>".length());
+        }
+        
+        // If no <coursePlan> tags found, try to find any XML-like content
+        if (cleaned.contains("<course>") && cleaned.contains("</course>")) {
+            int firstCourse = cleaned.indexOf("<course>");
+            int lastCourseEnd = cleaned.lastIndexOf("</course>");
+            if (firstCourse >= 0 && lastCourseEnd >= 0) {
+                return "<coursePlan>\n" + cleaned.substring(firstCourse, lastCourseEnd + "</course>".length()) + "\n</coursePlan>";
             }
         }
         
-        return csvBuilder.toString().trim();
+        return cleaned;
     }
 }

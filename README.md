@@ -135,8 +135,8 @@ The app runs a 6-step AI pipeline when you submit a request:
 2. **Web Search** — Queries DuckDuckGo for the university's degree requirements page
 3. **Page Scraping** — Uses Playwright to render the page to a PDF snapshot
 4. **PDF Text Extraction** — Extracts text from degree requirements and progress PDFs
-5. **LLM Analysis** — Sends text to a local Llama model which generates a CSV course plan
-6. **Course Selection** — Parses the CSV, builds a prerequisite graph, and selects up to 6 courses
+5. **LLM Analysis** — Sends text to a local Llama model which generates an XML course plan
+6. **Course Selection** — Parses the XML, builds a prerequisite graph, and selects up to 6 courses
 
 ---
 

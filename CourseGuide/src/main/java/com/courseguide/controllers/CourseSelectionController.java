@@ -1,8 +1,8 @@
 package com.courseguide.controllers;
 
-import com.courseguide.services.CsvImportService;
+import com.courseguide.services.XmlImportService;
 import com.courseguide.services.CourseSelectionService;
-import com.courseguide.services.SimpleCsvSelectionService;
+import com.courseguide.services.SimpleXmlSelectionService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -12,31 +12,31 @@ import java.util.*;
 
 /**
  * Controller for course selection endpoints.
- * Handles course selection logic with SQL and CSV fallback.
+ * Handles course selection logic with SQL and XML fallback.
  */
 @RestController
 @RequestMapping("/api")
 public class CourseSelectionController {
 
     @Autowired
-    private CsvImportService csvImportService;
+    private XmlImportService xmlImportService;
 
     @Autowired
     private CourseSelectionService courseSelectionService;
 
     @Autowired
-    private SimpleCsvSelectionService simpleCsvSelectionService;
+    private SimpleXmlSelectionService simpleXmlSelectionService;
 
     /**
-     * Selects courses based on the provided course plan CSV and constraints.
-     * Tries DB-backed path first, then falls back to CSV-only selection.
+     * Selects courses based on the provided course plan XML and constraints.
+     * Tries DB-backed path first, then falls back to XML-only selection.
      *
-     * @param body the request body containing coursePlanCsvPath, maxCredits, and completedCourses
+     * @param body the request body containing coursePlanXmlPath, maxCredits, and completedCourses
      * @return a map containing selected courses, total credits, import results, and whether SQL was used
      */
     @PostMapping("/courses/select")
     public Map<String, Object> selectCourses(@RequestBody Map<String, Object> body) {
-        String csvPath = Objects.toString(body.get("coursePlanCsvPath"), "");
+        String xmlPath = Objects.toString(body.get("coursePlanXmlPath"), "");
         int maxCredits = body.containsKey("maxCredits")
             ? Integer.parseInt(String.valueOf(body.get("maxCredits")))
             : 18;
@@ -55,7 +55,7 @@ public class CourseSelectionController {
         boolean usedSql = false;
 
         try {
-            CsvImportService.ImportResult importResult = csvImportService.importCoursePlan(csvPath);
+            XmlImportService.ImportResult importResult = xmlImportService.importCoursePlan(xmlPath);
             importSuccess = importResult.getSuccessCount();
             importErrors.addAll(importResult.getErrors());
 
@@ -70,12 +70,12 @@ public class CourseSelectionController {
         } catch (org.springframework.jdbc.CannotGetJdbcConnectionException dbEx) {
             System.err.println("SQL unavailable, falling back: " + dbEx.getMessage());
             try {
-                var fallback = simpleCsvSelectionService.selectFromCsv(Path.of(csvPath), maxCredits, completedCourses);
+                var fallback = simpleXmlSelectionService.selectFromXml(Path.of(xmlPath), maxCredits, completedCourses);
                 selected = fallback;
                 totalCredits = fallback.stream()
-                    .mapToInt(SimpleCsvSelectionService.CourseInfo::getCreditHours)
+                    .mapToInt(SimpleXmlSelectionService.CourseInfo::getCreditHours)
                     .sum();
-                importErrors.add("SQL unavailable; used CSV-only fallback selection.");
+                importErrors.add("SQL unavailable; used XML-only fallback selection.");
             } catch (Exception parseEx) {
                 importErrors.add("Fallback failed: " + parseEx.getMessage());
             }
@@ -83,12 +83,12 @@ public class CourseSelectionController {
         } catch (org.springframework.dao.DataAccessException dbEx) {
             System.err.println("SQL data access error, falling back: " + dbEx.getMessage());
             try {
-                var fallback = simpleCsvSelectionService.selectFromCsv(Path.of(csvPath), maxCredits, completedCourses);
+                var fallback = simpleXmlSelectionService.selectFromXml(Path.of(xmlPath), maxCredits, completedCourses);
                 selected = fallback;
                 totalCredits = fallback.stream()
-                    .mapToInt(SimpleCsvSelectionService.CourseInfo::getCreditHours)
+                    .mapToInt(SimpleXmlSelectionService.CourseInfo::getCreditHours)
                     .sum();
-                importErrors.add("SQL error; used CSV-only fallback selection.");
+                importErrors.add("SQL error; used XML-only fallback selection.");
             } catch (Exception parseEx) {
                 importErrors.add("Fallback failed: " + parseEx.getMessage());
             }

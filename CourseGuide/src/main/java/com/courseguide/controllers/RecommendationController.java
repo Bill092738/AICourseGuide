@@ -130,11 +130,11 @@ public class RecommendationController {
             debugPdfGeneration(false, 0);
         }
 
-        // Return recommendations with CSV path
+        // Return recommendations with XML path
         return Map.of(
             "recommendations", List.of(),
             "summarySentence", sentence,
-            "coursePlanCsvPath", coursePlanCsvPath,
+            "coursePlanXmlPath", coursePlanCsvPath,
             "coursePlanAvailable", !coursePlanCsvPath.isEmpty()
         );
     }
@@ -210,7 +210,7 @@ public class RecommendationController {
         Map<String, Object> result = new HashMap<>();
         result.put("recommendations", recs);
         result.put("summarySentence", sentence);
-        result.put("coursePlanCsvPath", coursePlanCsvPath);
+        result.put("coursePlanXmlPath", coursePlanCsvPath);
         result.put("coursePlanAvailable", !coursePlanCsvPath.isEmpty());
         
         return result;

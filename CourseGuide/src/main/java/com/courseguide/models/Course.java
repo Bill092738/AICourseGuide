@@ -29,6 +29,39 @@ public class Course {
     public void setCategory(String category) { this.category = category; }
     public void setDescription(String description) { this.description = description; }
     
+    /**
+     * Converts the course to XML format.
+     *
+     * @return XML string representation of the course
+     */
+    public String toXml() {
+        StringBuilder xml = new StringBuilder();
+        xml.append("  <course>\n");
+        xml.append("    <name>").append(escapeXml(courseName)).append("</name>\n");
+        xml.append("    <prerequisites>").append(escapeXml(preqCourseName)).append("</prerequisites>\n");
+        xml.append("    <creditHours>").append(creditHours).append("</creditHours>\n");
+        xml.append("    <category>").append(escapeXml(category)).append("</category>\n");
+        xml.append("    <description>").append(escapeXml(description)).append("</description>\n");
+        xml.append("  </course>");
+        return xml.toString();
+    }
+    
+    /**
+     * Escapes special XML characters.
+     *
+     * @param value the value to escape
+     * @return the escaped value
+     */
+    private static String escapeXml(String value) {
+        if (value == null) return "";
+        return value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;");
+    }
+    
     @Override
     public String toString() {
         return String.format("%s,%s,%d,%s,%s", courseName, preqCourseName, creditHours, category, description);
