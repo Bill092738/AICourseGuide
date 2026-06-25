@@ -46,6 +46,16 @@ type ApiConfig = {
   modelName: string
 }
 
+type StorageMode = "local" | "online"
+
+type UserProgress = {
+  caseNumber?: string
+  formData?: string
+  xmlContent?: string
+  selectedCourses?: string
+  totalCredits?: string
+}
+
 export default function App() {
   const [form, setForm] = useState<FormState>({
     university: "",
@@ -81,10 +91,137 @@ export default function App() {
     }
   })
   const [showSettings, setShowSettings] = useState(false)
+  
+  // Case number and storage mode state
+  const [caseNumber, setCaseNumber] = useState<string>("")
+  const [storageMode, setStorageMode] = useState<StorageMode>(() => {
+    try {
+      const saved = localStorage.getItem('courseguide-storage-mode')
+      return (saved as StorageMode) || "local"
+    } catch {
+      return "local"
+    }
+  })
+  const [showCaseModal, setShowCaseModal] = useState(false)
+  const [loadCaseNumber, setLoadCaseNumber] = useState("")
+  const [syncStatus, setSyncStatus] = useState<{ unsyncedCount: number; needsSync: boolean } | null>(null)
+  const [showSyncConfirm, setShowSyncConfirm] = useState(false)
 
   useEffect(() => {
     localStorage.setItem('courseguide-api-config', JSON.stringify(apiConfig))
   }, [apiConfig])
+
+  useEffect(() => {
+    localStorage.setItem('courseguide-storage-mode', storageMode)
+    if (storageMode === "online") {
+      checkSyncStatus()
+    }
+  }, [storageMode])
+
+  const checkSyncStatus = async () => {
+    try {
+      const res = await fetch("/api/progress/sync/status")
+      if (res.ok) {
+        const data = await res.json()
+        setSyncStatus(data)
+        if (data.needsSync) {
+          setShowSyncConfirm(true)
+        }
+      }
+    } catch (err) {
+      console.error("Failed to check sync status:", err)
+    }
+  }
+
+  const handleSyncToOnline = async () => {
+    try {
+      const res = await fetch("/api/progress/sync", { method: "POST" })
+      if (res.ok) {
+        const data = await res.json()
+        addLog(`Synced ${data.syncedCount} records to online storage`)
+        setSyncStatus({ unsyncedCount: data.remaining, needsSync: data.remaining > 0 })
+        setShowSyncConfirm(false)
+      }
+    } catch (err) {
+      addLog(`Sync failed: ${err instanceof Error ? err.message : "Unknown error"}`)
+    }
+  }
+
+  const generateNewCaseNumber = async () => {
+    try {
+      const res = await fetch("/api/progress/case-number", { method: "POST" })
+      if (res.ok) {
+        const data = await res.json()
+        setCaseNumber(data.caseNumber)
+        addLog(`Generated case number: ${data.caseNumber}`)
+      }
+    } catch (err) {
+      addLog(`Failed to generate case number: ${err instanceof Error ? err.message : "Unknown error"}`)
+    }
+  }
+
+  const saveProgress = async () => {
+    if (!caseNumber) {
+      await generateNewCaseNumber()
+    }
+    
+    const progress: UserProgress = {
+      caseNumber: caseNumber || undefined,
+      formData: JSON.stringify(form),
+      xmlContent: "",
+      selectedCourses: JSON.stringify(selected),
+      totalCredits: String(totalCredits)
+    }
+
+    try {
+      const endpoint = storageMode === "online" ? "/api/progress/save/online" : "/api/progress/save/local"
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(progress)
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        setCaseNumber(data.caseNumber)
+        addLog(`Progress saved with case number: ${data.caseNumber} (${data.mode} mode)`)
+      }
+    } catch (err) {
+      addLog(`Failed to save progress: ${err instanceof Error ? err.message : "Unknown error"}`)
+    }
+  }
+
+  const loadProgress = async () => {
+    if (!loadCaseNumber.trim()) {
+      addLog("Please enter a case number")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/progress/load/${loadCaseNumber.trim()}?mode=${storageMode}`)
+      if (res.ok) {
+        const progress: UserProgress = await res.json()
+        if (progress.formData) {
+          const parsedForm = JSON.parse(progress.formData)
+          setForm(parsedForm)
+        }
+        if (progress.selectedCourses) {
+          const parsedCourses = JSON.parse(progress.selectedCourses)
+          setSelected(parsedCourses)
+        }
+        if (progress.totalCredits) {
+          setTotalCredits(Number(progress.totalCredits))
+        }
+        setCaseNumber(progress.caseNumber || loadCaseNumber.trim())
+        addLog(`Progress loaded for case number: ${progress.caseNumber}`)
+        setShowCaseModal(false)
+      } else {
+        addLog(`No progress found for case number: ${loadCaseNumber}`)
+      }
+    } catch (err) {
+      addLog(`Failed to load progress: ${err instanceof Error ? err.message : "Unknown error"}`)
+    }
+  }
 
   // Helper function to add terminal log
   const addLog = (message: string) => {
@@ -399,6 +536,152 @@ export default function App() {
     )
   }
 
+  function CaseModal() {
+    if (!showCaseModal) return null
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Save/Load Progress</h2>
+            <button onClick={() => setShowCaseModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Storage Mode</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setStorageMode("local")}
+                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                  storageMode === "local" 
+                    ? "bg-blue-600 text-white" 
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Local (SQL)
+              </button>
+              <button
+                onClick={() => setStorageMode("online")}
+                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                  storageMode === "online" 
+                    ? "bg-green-600 text-white" 
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Online (Supabase)
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              {storageMode === "local" 
+                ? "Data is saved to local MySQL database" 
+                : "Data is synced to Supabase cloud (requires configuration)"}
+            </p>
+          </div>
+
+          {storageMode === "online" && syncStatus?.needsSync && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800 mb-2">
+                You have {syncStatus.unsyncedCount} unsynced local records.
+              </p>
+              <button
+                onClick={handleSyncToOnline}
+                className="px-3 py-1 bg-yellow-600 text-white text-sm rounded-md hover:bg-yellow-700"
+              >
+                Sync Now
+              </button>
+            </div>
+          )}
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Case Number</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={caseNumber}
+                onChange={(e) => setCaseNumber(e.target.value.toUpperCase())}
+                placeholder="Enter or generate case number"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+              />
+              <button
+                onClick={generateNewCaseNumber}
+                className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200"
+              >
+                Generate
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Load Existing Progress</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={loadCaseNumber}
+                onChange={(e) => setLoadCaseNumber(e.target.value.toUpperCase())}
+                placeholder="Enter case number to load"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+              />
+              <button
+                onClick={loadProgress}
+                className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+              >
+                Load
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowCaseModal(false)}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { saveProgress(); setShowCaseModal(false) }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+            >
+              Save Current Progress
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function SyncConfirmModal() {
+    if (!showSyncConfirm) return null
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+          <h2 className="text-lg font-semibold mb-4">Sync to Online Storage</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            You have {syncStatus?.unsyncedCount || 0} unsynced local records. 
+            Would you like to sync them to online storage (Supabase)?
+          </p>
+          <p className="text-xs text-gray-500 mb-4">
+            This will upload your local data to the cloud. Your data will remain in local storage as well.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowSyncConfirm(false)}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Skip for Now
+            </button>
+            <button
+              onClick={handleSyncToOnline}
+              className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+            >
+              Sync Now
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-gray-50 text-gray-900 min-h-screen">
       <div className="max-w-3xl mx-auto px-6 py-6">
@@ -407,17 +690,46 @@ export default function App() {
             <h1 className="text-3xl font-bold">CourseGuide</h1>
             <p className="text-gray-500">Get simple recommendations based on your profile and goals.</p>
           </div>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="mt-1 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-            title="LLM API Settings"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCaseModal(true)}
+              className="mt-1 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              title="Save/Load Progress"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="mt-1 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              title="LLM API Settings"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>
         </header>
+
+        {caseNumber && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-blue-700 font-medium">Case Number:</span>
+              <span className="text-lg font-mono font-bold text-blue-900">{caseNumber}</span>
+              <span className={`text-xs px-2 py-1 rounded-full ${storageMode === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                {storageMode === 'online' ? 'Online' : 'Local'}
+              </span>
+            </div>
+            <button
+              onClick={saveProgress}
+              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+            >
+              Save
+            </button>
+          </div>
+        )}
 
         <WorkflowPanel />
 
@@ -733,6 +1045,8 @@ export default function App() {
         )}
       </div>
       {showSettings && <SettingsModal />}
+      {showCaseModal && <CaseModal />}
+      {showSyncConfirm && <SyncConfirmModal />}
     </div>
   )
 }

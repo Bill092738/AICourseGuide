@@ -142,10 +142,44 @@ The app runs a 6-step AI pipeline when you submit a request:
 
 ## API Endpoints
 
+### Core Endpoints
 - `POST /api/recommendations` — Simple recommendations (JSON: `{ major, gpa }`)
 - `POST /api/upload-progress` — Upload a progress PDF (multipart/form-data)
 - `POST /api/recommendations/profile` — Rich recommendations (JSON profile, can reference uploaded PDF)
+- `POST /api/courses/select` — Select courses from XML course plan
 - `GET /api/health` — Health check endpoint
+
+### User Progress Endpoints
+- `POST /api/progress/case-number` — Generate a new unique case number
+- `POST /api/progress/save/local` — Save progress to local SQL database
+- `POST /api/progress/save/online` — Save progress to Supabase (with local fallback)
+- `GET /api/progress/load/{caseNumber}?mode=local|online` — Load progress by case number
+- `GET /api/progress/list` — List all saved progress entries
+- `DELETE /api/progress/delete/{caseNumber}` — Delete progress by case number
+- `POST /api/progress/sync` — Sync unsynced local progress to online storage
+- `GET /api/progress/sync/status` — Get sync status (unsynced count)
+
+## User Progress System
+
+The application supports saving and restoring user progress using unique case numbers (uppercase letters + digits).
+
+### Storage Modes
+- **Local Mode (Default)**: Progress is saved to MySQL database
+- **Online Mode**: Progress is synced to Supabase cloud (requires configuration in `application.properties`)
+
+### Configuration
+Add Supabase credentials to `application.properties`:
+```properties
+supabase.url=https://your-project.supabase.co
+supabase.anon-key=your-anon-key
+```
+
+### Sync Functionality
+When switching from local to online mode, the system will:
+1. Detect unsynced local records
+2. Prompt user to confirm sync
+3. Upload all unsynced records to Supabase
+4. Mark records as synced in local database
 
 ---
 
