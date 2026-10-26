@@ -1,0 +1,19 @@
+# OS / editors
+.DS_Store
+.idea/
+*.iml
+
+# Backend build output
+backend/target/
+*.class
+
+# Runtime output written by the backend (relative to its working directory)
+backend/uploads/
+backend/snapshots/
+backend/course-plans/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+*.log

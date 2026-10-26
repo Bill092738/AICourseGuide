@@ -64,7 +64,7 @@ PHYS201|PHYS101|1
 ### **1. Setup Database**
 ```sql
 -- Run the complete setup
-SOURCE src/main/resources/sql/setup_complete_dag.sql;
+SOURCE backend/src/main/resources/sql/setup_complete_dag.sql;
 ```
 
 ### **2. Load Your CSV Data**
@@ -138,7 +138,7 @@ CS201|Math1151|0
 ## 📁 **File Structure**
 
 ```
-src/main/resources/sql/
+backend/src/main/resources/sql/
 ├── setup_complete_dag.sql      # Complete setup with CSV processing
 ├── simple_csv_processor.sql    # Simple CSV processor
 ├── csv_format_example.sql     # CSV format examples

@@ -29,7 +29,7 @@ The solution processes CSV data containing course prerequisites and generates DA
 ### **1. Setup Database**
 ```sql
 -- Run the complete setup
-SOURCE src/main/resources/sql/setup_complete_dag.sql;
+SOURCE backend/src/main/resources/sql/setup_complete_dag.sql;
 ```
 
 ### **2. Generate DAG Edge List**
@@ -66,7 +66,7 @@ Math 3589|Stat 4201|1
 ## 📁 **File Structure**
 
 ```
-src/main/resources/sql/
+backend/src/main/resources/sql/
 ├── setup_complete_dag.sql      # Complete setup with sample data
 ├── schema.sql                  # Database schema only
 ├── stored_procedures.sql       # All stored procedures

@@ -1,4 +1,4 @@
-package com.courseguide;
+package com.courseguide.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

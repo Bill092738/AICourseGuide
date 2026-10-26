@@ -29,7 +29,7 @@ CS201|CS101|0
 
 ### **1. Setup Database**
 ```sql
-SOURCE src/main/resources/sql/dag_solution.sql;
+SOURCE backend/src/main/resources/sql/dag_solution.sql;
 ```
 
 ### **2. Load Your Data**

@@ -30,13 +30,13 @@ The solution processes **any CSV data** containing course prerequisites and gene
 ### **1. Setup Database**
 ```sql
 -- Run the complete setup
-SOURCE src/main/resources/sql/setup_complete_dag.sql;
+SOURCE backend/src/main/resources/sql/setup_complete_dag.sql;
 ```
 
 ### **2. Process Your CSV Data**
 ```sql
 -- Method 1: Use the generic CSV processor
-SOURCE src/main/resources/sql/generic_csv_processor.sql;
+SOURCE backend/src/main/resources/sql/generic_csv_processor.sql;
 
 -- Method 2: Add individual prerequisites
 CALL add_course_prerequisite('Your Course', 'Prerequisite Course', 3, 'Major1', 'Description');
@@ -67,7 +67,7 @@ Where:
 ## 📁 **File Structure**
 
 ```
-src/main/resources/sql/
+backend/src/main/resources/sql/
 ├── setup_complete_dag.sql      # Complete setup (now generic)
 ├── schema.sql                  # Database schema only
 ├── stored_procedures.sql       # Generic stored procedures

@@ -60,10 +60,10 @@ CREATE DATABASE courseguide_dag;
 USE courseguide_dag;
 
 -- Run schema.sql to create tables and functions
-SOURCE src/main/resources/sql/schema.sql;
+SOURCE backend/src/main/resources/sql/schema.sql;
 
 -- Load sample data (optional)
-SOURCE src/main/resources/sql/sample_data.sql;
+SOURCE backend/src/main/resources/sql/sample_data.sql;
 ```
 
 ### 2. Configuration
