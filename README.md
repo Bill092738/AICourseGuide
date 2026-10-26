@@ -1,4 +1,23 @@
-# CourseGuide
+<h1 align="center">CourseGuide</h1>
+
+<p align="center"><strong>Your next semester, planned from your real degree requirements.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/Bill092738/AICourseGuide/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Bill092738/AICourseGuide/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="backend: Java 21 · Spring Boot 3.3" src="https://img.shields.io/badge/backend-Java%2021%20·%20Spring%20Boot%203.3-6DB33F">
+  <img alt="frontend: TypeScript · React 19" src="https://img.shields.io/badge/frontend-TypeScript%20·%20React%2019-3178C6">
+  <img alt="design: Material 3" src="https://img.shields.io/badge/design-Material%203-7C4DFF">
+  <img alt="database: MySQL 8" src="https://img.shields.io/badge/database-MySQL%208-4479A1">
+</p>
+
+## Team
+
+| Member | GitHub |
+| :---: | :---: |
+| Bill Zhao | [`Bill092738`](https://github.com/Bill092738) |
+| Jasminwzq | [`Jasminwzq`](https://github.com/Jasminwzq) |
+
+---
 
 CourseGuide builds a next-semester course plan from your university's published degree requirements and your academic progress. It finds the requirements page, saves it as a PDF, has an LLM turn it into a structured course plan, and then picks courses that fit your credit limit and prerequisites.
 
