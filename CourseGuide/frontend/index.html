@@ -2,22 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the app draw behind Android gesture/status bars; safe-area insets are handled in CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="CourseGuide builds a next-semester course plan from your degree requirements and progress." />
+    <!-- Chrome on Android tints the status/address bar with this; it is updated at runtime to match the M3 surface color -->
+    <meta name="theme-color" content="#fdf8fd" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>CourseGuide</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      // Optional config
-      tailwind.config = {
-        darkMode: 'class',
-        theme: { extend: {} },
-        // If you build class names dynamically, add them here so the CDN generates them:
-        // safelist: ['bg-blue-600','hover:bg-blue-700','text-white'],
-        // To avoid Tailwind base reset conflicts with your existing CSS, you can disable preflight:
-        // corePlugins: { preflight: false },
-      }
-    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Roboto: M3 default brand and plain typeface (also the Android system font) -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap"
+    />
+    <!-- Material Symbols Rounded (variable: FILL axis is used for active navigation icons) -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
+    />
   </head>
-  <body class="bg-gray-50 min-h-screen text-gray-900">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,1052 +1,212 @@
-import { useState, useEffect } from "react"
-import './App.css'
+import { useCallback, useEffect, useState } from "react"
+import { Dialog } from "./components/Dialog"
+import { NavigationBar, NavigationRail, TopAppBar, type Destination } from "./components/Navigation"
+import { useWindowClass } from "./hooks/useWindowClass"
+import { PlanPage } from "./pages/PlanPage"
+import { ResultsPage } from "./pages/ResultsPage"
+import { SavedPage } from "./pages/SavedPage"
+import { SettingsPage } from "./pages/SettingsPage"
+import { useAppState, validateForm } from "./state/AppState"
+import { applyTheme, loadThemePrefs, saveThemePrefs, type ThemePrefs } from "./theme/theme"
 
-type DegreeLevel = "" | "Undergraduate" | "Graduate"
+type DestId = "plan" | "results" | "saved" | "settings"
+const DEST_IDS: DestId[] = ["plan", "results", "saved", "settings"]
 
-type FormState = {
-  university: string
-  major: string
-  degreeLevel: DegreeLevel
-  graduationYear: number | ""
-  progressPdf: File | null
-  targetMajor: string
-  targetMinor: string
-  planName: string
-  preferredElectives: string
-  maxCreditHour: number | ""
-  semester: string
-  gpa: number | ""
-}
-
-type RecommendationsResponse = {
-  recommendations?: string[]
-  coursePlanXmlPath?: string
-  coursePlanAvailable?: boolean
-  [k: string]: unknown
-}
-
-type SelectedCourse = {
-  courseName: string
-  creditHours: number
-  category: string
-  description: string
-  prerequisites: string[]
-}
-
-type SelectResponse = {
-  courses: SelectedCourse[]
-  totalCredits: number
-  importSuccess: number
-  importErrors: string[]
-}
-
-type ApiConfig = {
-  apiBaseUrl: string
-  apiKey: string
-  modelName: string
-}
-
-type StorageMode = "local" | "online"
-
-type UserProgress = {
-  caseNumber?: string
-  formData?: string
-  xmlContent?: string
-  selectedCourses?: string
-  totalCredits?: string
+const fromHash = (): DestId => {
+  const h = window.location.hash.replace("#", "") as DestId
+  return DEST_IDS.includes(h) ? h : "plan"
 }
 
 export default function App() {
-  const [form, setForm] = useState<FormState>({
-    university: "",
-    major: "",
-    degreeLevel: "",
-    graduationYear: "",
-    progressPdf: null,
-    targetMajor: "",
-    targetMinor: "",
-    planName: "",
-    preferredElectives: "",
-    maxCreditHour: "",
-    semester: "",
-    gpa: "",
-  })
-  const [results, setResults] = useState<string[]>([])
-  const [status, setStatus] = useState<string>("")
-  const [uploadProgress, setUploadProgress] = useState<string>("")
-  const [isUploading, setIsUploading] = useState(false)
-  const [selected, setSelected] = useState<SelectedCourse[]>([])
-  const [totalCredits, setTotalCredits] = useState<number>(0)
-  const [importErrors, setImportErrors] = useState<string[]>([])
-  // Add terminal logs state
-  const [terminalLogs, setTerminalLogs] = useState<string[]>([])
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const s = useAppState()
+  const windowClass = useWindowClass()
+  const compact = windowClass === "compact"
+  const wide = windowClass === "expanded" || windowClass === "large" || windowClass === "extra-large"
+  const railExpanded = windowClass === "large" || windowClass === "extra-large"
 
-  const [apiConfig, setApiConfig] = useState<ApiConfig>(() => {
-    try {
-      const saved = localStorage.getItem('courseguide-api-config')
-      return saved ? JSON.parse(saved) : { apiBaseUrl: '', apiKey: '', modelName: '' }
-    } catch {
-      return { apiBaseUrl: '', apiKey: '', modelName: '' }
-    }
-  })
-  const [showSettings, setShowSettings] = useState(false)
-  
-  // Case number and storage mode state
-  const [caseNumber, setCaseNumber] = useState<string>("")
-  const [storageMode, setStorageMode] = useState<StorageMode>(() => {
-    try {
-      const saved = localStorage.getItem('courseguide-storage-mode')
-      return (saved as StorageMode) || "local"
-    } catch {
-      return "local"
-    }
-  })
-  const [showCaseModal, setShowCaseModal] = useState(false)
-  const [loadCaseNumber, setLoadCaseNumber] = useState("")
-  const [syncStatus, setSyncStatus] = useState<{ unsyncedCount: number; needsSync: boolean } | null>(null)
-  const [showSyncConfirm, setShowSyncConfirm] = useState(false)
-
+  // ---- Theme (dynamic color) ----
+  const [theme, setTheme] = useState<ThemePrefs>(loadThemePrefs)
   useEffect(() => {
-    localStorage.setItem('courseguide-api-config', JSON.stringify(apiConfig))
-  }, [apiConfig])
+    applyTheme(theme)
+    saveThemePrefs(theme)
+    if (theme.mode !== "system") return
+    const mq = window.matchMedia("(prefers-color-scheme: dark)")
+    const onChange = () => applyTheme(theme)
+    mq.addEventListener("change", onChange)
+    return () => mq.removeEventListener("change", onChange)
+  }, [theme])
 
+  // ---- Destinations (hash-based, so the browser/Android back button works) ----
+  const [dest, setDest] = useState<DestId>(fromHash)
   useEffect(() => {
-    localStorage.setItem('courseguide-storage-mode', storageMode)
-    if (storageMode === "online") {
-      checkSyncStatus()
-    }
-  }, [storageMode])
+    const onHash = () => setDest(fromHash())
+    window.addEventListener("hashchange", onHash)
+    return () => window.removeEventListener("hashchange", onHash)
+  }, [])
+  const navigate = useCallback((id: string) => {
+    if (window.location.hash !== `#${id}`) window.location.hash = id
+    window.scrollTo({ top: 0 })
+  }, [])
 
-  const checkSyncStatus = async () => {
-    try {
-      const res = await fetch("/api/progress/sync/status")
-      if (res.ok) {
-        const data = await res.json()
-        setSyncStatus(data)
-        if (data.needsSync) {
-          setShowSyncConfirm(true)
-        }
+  const { hasUnseenResults, markResultsSeen } = s
+  useEffect(() => {
+    if (dest === "results" && hasUnseenResults) markResultsSeen()
+  }, [dest, hasUnseenResults, markResultsSeen])
+
+  // Jump to Results as soon as a run starts.
+  useEffect(() => {
+    if (s.phase === "requirements") navigate("results")
+  }, [s.phase, navigate])
+
+  // ---- Scroll state: top app bar tint and extended-FAB collapse ----
+  const [scrolled, setScrolled] = useState(false)
+  const [fabExtended, setFabExtended] = useState(true)
+  useEffect(() => {
+    let last = window.scrollY
+    const onScroll = () => {
+      const y = window.scrollY
+      setScrolled(y > 0)
+      if (Math.abs(y - last) > 8) {
+        setFabExtended(y < last || y < 16)
+        last = y
       }
-    } catch (err) {
-      console.error("Failed to check sync status:", err)
     }
-  }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
 
-  const handleSyncToOnline = async () => {
-    try {
-      const res = await fetch("/api/progress/sync", { method: "POST" })
-      if (res.ok) {
-        const data = await res.json()
-        addLog(`Synced ${data.syncedCount} records to online storage`)
-        setSyncStatus({ unsyncedCount: data.remaining, needsSync: data.remaining > 0 })
-        setShowSyncConfirm(false)
-      }
-    } catch (err) {
-      addLog(`Sync failed: ${err instanceof Error ? err.message : "Unknown error"}`)
-    }
-  }
-
-  const generateNewCaseNumber = async () => {
-    try {
-      const res = await fetch("/api/progress/case-number", { method: "POST" })
-      if (res.ok) {
-        const data = await res.json()
-        setCaseNumber(data.caseNumber)
-        addLog(`Generated case number: ${data.caseNumber}`)
-      }
-    } catch (err) {
-      addLog(`Failed to generate case number: ${err instanceof Error ? err.message : "Unknown error"}`)
-    }
-  }
-
-  const saveProgress = async () => {
-    if (!caseNumber) {
-      await generateNewCaseNumber()
-    }
-    
-    const progress: UserProgress = {
-      caseNumber: caseNumber || undefined,
-      formData: JSON.stringify(form),
-      xmlContent: "",
-      selectedCourses: JSON.stringify(selected),
-      totalCredits: String(totalCredits)
-    }
-
-    try {
-      const endpoint = storageMode === "online" ? "/api/progress/save/online" : "/api/progress/save/local"
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(progress)
-      })
-      
-      if (res.ok) {
-        const data = await res.json()
-        setCaseNumber(data.caseNumber)
-        addLog(`Progress saved with case number: ${data.caseNumber} (${data.mode} mode)`)
-      }
-    } catch (err) {
-      addLog(`Failed to save progress: ${err instanceof Error ? err.message : "Unknown error"}`)
-    }
-  }
-
-  const loadProgress = async () => {
-    if (!loadCaseNumber.trim()) {
-      addLog("Please enter a case number")
+  const onGenerate = useCallback(() => {
+    if (s.running) {
+      navigate("results")
       return
     }
+    if (Object.values(validateForm(s.form)).some(Boolean)) navigate("plan")
+    void s.generate()
+  }, [s, navigate])
 
-    try {
-      const res = await fetch(`/api/progress/load/${loadCaseNumber.trim()}?mode=${storageMode}`)
-      if (res.ok) {
-        const progress: UserProgress = await res.json()
-        if (progress.formData) {
-          const parsedForm = JSON.parse(progress.formData)
-          setForm(parsedForm)
-        }
-        if (progress.selectedCourses) {
-          const parsedCourses = JSON.parse(progress.selectedCourses)
-          setSelected(parsedCourses)
-        }
-        if (progress.totalCredits) {
-          setTotalCredits(Number(progress.totalCredits))
-        }
-        setCaseNumber(progress.caseNumber || loadCaseNumber.trim())
-        addLog(`Progress loaded for case number: ${progress.caseNumber}`)
-        setShowCaseModal(false)
-      } else {
-        addLog(`No progress found for case number: ${loadCaseNumber}`)
-      }
-    } catch (err) {
-      addLog(`Failed to load progress: ${err instanceof Error ? err.message : "Unknown error"}`)
-    }
-  }
-
-  // Helper function to add terminal log
-  const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString()
-    setTerminalLogs(prev => [...prev, `[${timestamp}] ${message}`])
-  }
-
-  const onChange =
-    <K extends keyof FormState>(key: K) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const val = e.target.value
-      if (key === "graduationYear" || key === "maxCreditHour" || key === "gpa") {
-        setForm((s) => ({ ...s, [key]: val === "" ? "" : Number(val) }))
-      } else {
-        setForm((s) => ({ ...s, [key]: val }))
-      }
-    }
-
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null
-    setForm((s) => ({ ...s, progressPdf: file }))
-    setUploadProgress("") // Clear previous upload status
-  }
-
-  // New: Manual upload function with confirmation
-  const uploadPdfNow = async () => {
-    if (!form.progressPdf) {
-      setUploadProgress("No file selected")
-      return
-    }
-
-    setIsUploading(true)
-    setUploadProgress("Uploading...")
-
-    try {
-      const formData = new FormData()
-      formData.append("progressPdf", form.progressPdf)
-
-      const uploadRes = await fetch("/api/upload-progress", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!uploadRes.ok) {
-        throw new Error(`Upload failed: HTTP ${uploadRes.status}`)
-      }
-
-      const uploadData = await uploadRes.json()
-      const fileId = uploadData.progressFileId || ""
-      
-      console.log("PDF uploaded with ID:", fileId)
-      setUploadProgress(`✓ Uploaded successfully (ID: ${fileId.substring(0, 8)}...)`)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error"
-      setUploadProgress(`✗ Upload failed: ${message}`)
-      console.error("Upload error:", err)
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  const submit = async () => {
-    setStatus("Loading...")
-    setResults([])
-    setSelected([])
-    setImportErrors([])
-    setTotalCredits(0)
-    setTerminalLogs([]) // Clear previous logs
-    setIsAnalyzing(false)
-    
-    try {
-      addLog("🚀 Starting recommendation process...")
-      addLog("---- Debug: Student Info ----")
-      addLog(`targetMajor: ${form.targetMajor}`)
-      addLog(`degreeLevel: ${form.degreeLevel}`)
-      addLog(`preferredElectives: ${form.preferredElectives}`)
-      addLog(`major: ${form.major}`)
-      addLog(`university: ${form.university}`)
-      addLog(`targetMinor: ${form.targetMinor}`)
-      addLog(`planName: ${form.planName}`)
-      addLog(`gpa: ${form.gpa}`)
-      addLog(`graduationYear: ${form.graduationYear}`)
-      addLog(`semester: ${form.semester}`)
-      addLog("---- End Student Info ----")
-      
-      const res = await fetch("/api/recommendations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          university: form.university,
-          major: form.major,
-          degreeLevel: form.degreeLevel,
-          graduationYear: form.graduationYear,
-          targetMajor: form.targetMajor,
-          targetMinor: form.targetMinor,
-          planName: form.planName,
-          preferredElectives: form.preferredElectives,
-          semester: form.semester,
-          gpa: form.gpa,
-          llmConfig: {
-            apiBaseUrl: apiConfig.apiBaseUrl || undefined,
-            apiKey: apiConfig.apiKey || undefined,
-            modelName: apiConfig.modelName || undefined,
-          },
-        }),
-      })
-      
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      
-      addLog("---- Generated Sentence ----")
-      addLog(`The ${form.graduationYear} year graduate requirement of ${form.major} at ${form.university}`)
-      addLog("---- End Generated Sentence ----")
-      addLog("🔍 Searching for degree requirements...")
-      addLog("Creating Playwright instance...")
-      addLog("Launching browser...")
-      addLog("Navigating to URL...")
-      addLog("Dismissing cookie banners and overlays...")
-      addLog("Expanding page content...")
-      addLog("Generating PDF...")
-      
-      const data: RecommendationsResponse = await res.json()
-      setResults(data.recommendations ?? [])
-
-      if (data.coursePlanAvailable && data.coursePlanXmlPath) {
-        addLog("---- PDF generation completed successfully ----")
-        addLog("---- Triggering LLM Analysis ----")
-        setIsAnalyzing(true) // Start spinner animation
-        addLog("---- Starting LLM Analysis ----")
-        addLog("Extracting text from Degree Requirements PDF...")
-        addLog("Degree Requirements text extracted: ~17000 characters")
-        addLog("Prompt length (chars): ~2700, approx tokens: ~680")
-        addLog("---- Calling Llama API ----")
-        const apiUrl = apiConfig.apiBaseUrl
-          ? apiConfig.apiBaseUrl.replace(/\/+$/, '') + '/v1/chat/completions'
-          : 'http://localhost:8075/v1/chat/completions'
-        addLog(`API URL: ${apiUrl}`)
-        
-        const max = form.maxCreditHour === "" || Number(form.maxCreditHour) <= 0 ? 18 : Number(form.maxCreditHour)
-        const selectRes = await fetch("/api/courses/select", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            coursePlanXmlPath: data.coursePlanXmlPath,
-            maxCredits: max,
-            completedCourses: [] as string[],
-          }),
-        })
-        
-        setIsAnalyzing(false) // Stop spinner animation
-        
-        if (!selectRes.ok) throw new Error(`Select HTTP ${selectRes.status}`)
-        
-        const sel: SelectResponse = await selectRes.json()
-        setSelected(sel.courses ?? [])
-        setTotalCredits(sel.totalCredits ?? 0)
-        // Filter out SQL fallback messages and JDBC connection errors
-        const userFriendlyErrors = (sel.importErrors ?? []).filter(err => 
-          !err.toLowerCase().includes('sql') && 
-          !err.toLowerCase().includes('fallback') &&
-          !err.toLowerCase().includes('database') &&
-          !err.toLowerCase().includes('jdbc') &&
-          !err.toLowerCase().includes('connection')
-        )
-        setImportErrors(userFriendlyErrors)
-        
-        addLog("---- Processing LLM Response for XML ----")
-        addLog(`Extracted XML content: ${sel.courses?.length ?? 0} courses`)
-        addLog("---- LLM Analysis Complete ----")
-        addLog(`XML saved to: ${data.coursePlanXmlPath}`)
-        addLog("---- End ----")
-        addLog(`✨ Selected ${sel.courses?.length ?? 0} courses (${sel.totalCredits ?? 0} credits)`)
-      } else {
-        addLog("⚠️ No course plan available")
-      }
-
-      addLog("🎉 Process completed successfully!")
-      setStatus("Complete!")
-    } catch (err) {
-      setIsAnalyzing(false)
-      const message = err instanceof Error ? err.message : "Unknown error"
-      addLog(`❌ Error: ${message}`)
-      setStatus(`Error: ${message}`)
-      console.error(err)
-    }
-  }
-
-  const spinnerFrames = ['/', '—', '\\', '|']
-
-  const workflowSteps = [
-    { step: 1, title: "Student Profile", description: "Collect university, major, degree level, graduation year, and uploaded progress PDF." },
-    { step: 2, title: "Web Search", description: "Search DuckDuckGo for the university's degree requirements page." },
-    { step: 3, title: "Page Scraping", description: "Use Playwright to load the page, dismiss overlays, and render it to a PDF snapshot." },
-    { step: 4, title: "PDF Text Extraction", description: "Extract text from degree requirements and student progress PDFs." },
-    { step: 5, title: "LLM Analysis", description: "Send text to a local Llama model which generates an XML course plan." },
-    { step: 6, title: "Course Selection", description: "Parse the XML, build a prerequisite graph, and select up to 6 courses within credit limits." },
+  const destinations: Destination[] = [
+    { id: "plan", label: "Plan", icon: "edit_note" },
+    {
+      id: "results",
+      label: "Results",
+      icon: "fact_check",
+      badge: dest !== "results" && hasUnseenResults ? s.results.courses.length || true : s.running && dest !== "results" ? true : undefined,
+    },
+    { id: "saved", label: "Saved", icon: "bookmarks" },
+    { id: "settings", label: "Settings", icon: "settings" },
   ]
 
-  function WorkflowPanel() {
-    const [open, setOpen] = useState(false)
+  const showCompactFab = compact && dest === "plan"
+  const fabLabel = s.running ? "Generating…" : "Generate plan"
 
-    return (
-      <section className="mb-6">
-        <button
-          onClick={() => setOpen(!open)}
-          className="w-full text-left bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex items-center justify-between hover:bg-gray-50"
-        >
-          <h2 className="text-lg font-semibold text-gray-700">How it works — AI Workflow</h2>
-          <span className="text-gray-400 text-xl">{open ? '\u2212' : '+'}</span>
-        </button>
-        {open && (
-          <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-4">
-            <ol className="space-y-4">
-              {workflowSteps.map((s) => (
-                <li key={s.step} className="flex gap-3">
-                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">
-                    {s.step}
-                  </span>
-                  <div>
-                    <h3 className="font-medium text-gray-900">{s.title}</h3>
-                    <p className="text-sm text-gray-500">{s.description}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-      </section>
-    )
-  }
+  // Snackbars sit above the navigation bar and FAB on compact windows.
+  useEffect(() => {
+    const bottom = compact
+      ? `calc(var(--app-nav-bar-height) + env(safe-area-inset-bottom) + ${showCompactFab ? 88 : 16}px)`
+      : "24px"
+    document.documentElement.style.setProperty("--snackbar-bottom", bottom)
+  }, [compact, showCompactFab])
 
-  function Spinner() {
-    const [frame, setFrame] = useState(0)
+  const title = dest === "plan" ? "CourseGuide" : destinations.find((d) => d.id === dest)!.label
 
-    useEffect(() => {
-      const interval = setInterval(() => {
-        setFrame(prev => (prev + 1) % spinnerFrames.length)
-      }, 150)
-      return () => clearInterval(interval)
-    }, [])
+  const caseChip = s.caseNumber && dest !== "saved" && (
+    <md-assist-chip label={s.caseNumber} onClick={() => navigate("saved")} className="font-mono">
+      <md-icon slot="icon">bookmark</md-icon>
+    </md-assist-chip>
+  )
 
-    return <span className="inline-block w-4">{spinnerFrames[frame]}</span>
-  }
-
-  function SettingsModal() {
-    if (!showSettings) return null
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">LLM API Settings</h2>
-            <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-          </div>
-
-          <p className="text-xs text-gray-500 mb-4">
-            Configure your own LLM provider. Uses OpenAI-compatible API format.
-            Leave all fields empty to use the default local server.
-          </p>
-
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
-            <input
-              type="text"
-              placeholder="e.g., http://localhost:8075 or https://api.openai.com/v1"
-              value={apiConfig.apiBaseUrl}
-              onChange={(e) => setApiConfig({ ...apiConfig, apiBaseUrl: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-            <p className="text-xs text-gray-400 mt-1">Leave empty for default (localhost:8075)</p>
-          </div>
-
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-            <input
-              type="password"
-              placeholder="Enter your API key"
-              value={apiConfig.apiKey}
-              onChange={(e) => setApiConfig({ ...apiConfig, apiKey: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-            <p className="text-xs text-gray-400 mt-1">Stored in your browser only. Never sent to our server.</p>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Model Name (optional)</label>
-            <input
-              type="text"
-              placeholder="e.g., gpt-4o, llama-3.3-70b-versatile"
-              value={apiConfig.modelName}
-              onChange={(e) => setApiConfig({ ...apiConfig, modelName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-            <p className="text-xs text-gray-400 mt-1">Leave empty to auto-discover from API</p>
-          </div>
-
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={() => { setApiConfig({ apiBaseUrl: '', apiKey: '', modelName: '' }); localStorage.removeItem('courseguide-api-config') }}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Reset to Default
-            </button>
-            <button
-              onClick={() => setShowSettings(false)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  function CaseModal() {
-    if (!showCaseModal) return null
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Save/Load Progress</h2>
-            <button onClick={() => setShowCaseModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Storage Mode</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setStorageMode("local")}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  storageMode === "local" 
-                    ? "bg-blue-600 text-white" 
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Local (SQL)
-              </button>
-              <button
-                onClick={() => setStorageMode("online")}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  storageMode === "online" 
-                    ? "bg-green-600 text-white" 
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Online (Supabase)
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {storageMode === "local" 
-                ? "Data is saved to local MySQL database" 
-                : "Data is synced to Supabase cloud (requires configuration)"}
-            </p>
-          </div>
-
-          {storageMode === "online" && syncStatus?.needsSync && (
-            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800 mb-2">
-                You have {syncStatus.unsyncedCount} unsynced local records.
-              </p>
-              <button
-                onClick={handleSyncToOnline}
-                className="px-3 py-1 bg-yellow-600 text-white text-sm rounded-md hover:bg-yellow-700"
-              >
-                Sync Now
-              </button>
-            </div>
-          )}
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Case Number</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={caseNumber}
-                onChange={(e) => setCaseNumber(e.target.value.toUpperCase())}
-                placeholder="Enter or generate case number"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
-              />
-              <button
-                onClick={generateNewCaseNumber}
-                className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200"
-              >
-                Generate
-              </button>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Load Existing Progress</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={loadCaseNumber}
-                onChange={(e) => setLoadCaseNumber(e.target.value.toUpperCase())}
-                placeholder="Enter case number to load"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
-              />
-              <button
-                onClick={loadProgress}
-                className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-              >
-                Load
-              </button>
-            </div>
-          </div>
-
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={() => setShowCaseModal(false)}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => { saveProgress(); setShowCaseModal(false) }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-            >
-              Save Current Progress
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  function SyncConfirmModal() {
-    if (!showSyncConfirm) return null
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-          <h2 className="text-lg font-semibold mb-4">Sync to Online Storage</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            You have {syncStatus?.unsyncedCount || 0} unsynced local records. 
-            Would you like to sync them to online storage (Supabase)?
-          </p>
-          <p className="text-xs text-gray-500 mb-4">
-            This will upload your local data to the cloud. Your data will remain in local storage as well.
-          </p>
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={() => setShowSyncConfirm(false)}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Skip for Now
-            </button>
-            <button
-              onClick={handleSyncToOnline}
-              className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-            >
-              Sync Now
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const page = (() => {
+    switch (dest) {
+      case "plan":
+        return <PlanPage twoColumn={wide} showInlineSubmit={!compact} onGenerate={onGenerate} />
+      case "results":
+        return <ResultsPage twoPane={wide} onGoToPlan={() => navigate("plan")} onGoToSaved={() => navigate("saved")} />
+      case "saved":
+        return <SavedPage twoPane={wide} onLoaded={() => navigate("plan")} />
+      case "settings":
+        return <SettingsPage twoPane={wide} theme={theme} onTheme={setTheme} />
+    }
+  })()
 
   return (
-    <div className="bg-gray-50 text-gray-900 min-h-screen">
-      <div className="max-w-3xl mx-auto px-6 py-6">
-        <header className="mb-8 flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">CourseGuide</h1>
-            <p className="text-gray-500">Get simple recommendations based on your profile and goals.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowCaseModal(true)}
-              className="mt-1 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-              title="Save/Load Progress"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="mt-1 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-              title="LLM API Settings"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          </div>
-        </header>
-
-        {caseNumber && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-blue-700 font-medium">Case Number:</span>
-              <span className="text-lg font-mono font-bold text-blue-900">{caseNumber}</span>
-              <span className={`text-xs px-2 py-1 rounded-full ${storageMode === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                {storageMode === 'online' ? 'Online' : 'Local'}
-              </span>
-            </div>
-            <button
-              onClick={saveProgress}
-              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-            >
-              Save
-            </button>
-          </div>
-        )}
-
-        <WorkflowPanel />
-
-        <section className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-          <h2 className="text-xl font-semibold mb-3">User basic info</h2>
-          <div className="mb-3">
-            <label htmlFor="university" className="block text-sm font-medium text-gray-700 mb-1">University</label>
-            <input
-              id="university"
-              type="text"
-              placeholder='e.g., "The Ohio State University"'
-              value={form.university}
-              onChange={onChange("university")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
-          <div className="mb-3">
-            <label htmlFor="major" className="block text-sm font-medium text-gray-700 mb-1">Major</label>
-            <input
-              id="major"
-              type="text"
-              placeholder="e.g., Computer Science"
-              value={form.major}
-              onChange={onChange("major")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="mb-3">
-              <label htmlFor="degreeLevel" className="block text-sm font-medium text-gray-700 mb-1">Degree level</label>
-              <select
-                id="degreeLevel"
-                value={form.degreeLevel}
-                onChange={onChange("degreeLevel")}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="" disabled>
-                  Select
-                </option>
-                <option value="Undergraduate">Undergraduate</option>
-                <option value="Graduate">Graduate</option>
-              </select>
-            </div>
-            <div className="mb-3">
-              <label htmlFor="graduationYear" className="block text-sm font-medium text-gray-700 mb-1">Graduation year</label>
-              <input
-                id="graduationYear"
-                type="number"
-                min={1900}
-                max={2100}
-                placeholder="e.g., 2027"
-                value={form.graduationYear === "" ? "" : form.graduationYear}
-                onChange={onChange("graduationYear")}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm mt-6">
-          <h2 className="text-xl font-semibold mb-3">Current progress</h2>
-          <p className="text-gray-500">
-            Upload a single PDF that includes: current courses, completed courses, and any transfer credits.
-          </p>
-          <div className="mb-3">
-            <label htmlFor="progressPdf" className="block text-sm font-medium text-gray-700 mb-1">Progress PDF</label>
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <input
-                  id="progressPdf"
-                  type="file"
-                  accept="application/pdf"
-                  onChange={onFileChange}
-                  className="border-0 bg-transparent p-0 text-sm text-gray-900
-                             file:inline-flex file:items-center file:justify-center
-                             file:rounded-md file:border-0 file:bg-blue-600
-                             file:px-4 file:py-2 file:text-white
-                             hover:file:bg-blue-700 file:cursor-pointer
-                             disabled:file:opacity-50 disabled:file:cursor-not-allowed"
-                  disabled={isUploading}
-                />
-                {form.progressPdf && (
-                  <span className="text-sm text-gray-600">{form.progressPdf.name}</span>
-                )}
+    <div className="min-h-dvh bg-surface">
+      {!compact && (
+        <NavigationRail
+          destinations={destinations}
+          active={dest}
+          onSelect={navigate}
+          expanded={railExpanded}
+          header={
+            railExpanded ? (
+              <div className="flex h-12 items-center gap-3 px-2">
+                <img src="/icon.svg" alt="" className="size-8 rounded-sm" />
+                <span className="md-typescale-title-large text-on-surface">CourseGuide</span>
               </div>
-              
-              {form.progressPdf && (
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={uploadPdfNow}
-                    disabled={isUploading}
-                    className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isUploading ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Uploading...
-                      </>
-                    ) : (
-                      "Upload Now"
-                    )}
-                  </button>
-                  
-                  {uploadProgress && (
-                    <span className={`text-sm ${uploadProgress.startsWith('✓') ? 'text-green-600' : uploadProgress.startsWith('✗') ? 'text-red-600' : 'text-blue-600'}`}>
-                      {uploadProgress}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm mt-6">
-          <h2 className="text-xl font-semibold mb-3">Target or goal</h2>
-          <div className="mb-3">
-            <label htmlFor="targetMajor" className="block text-sm font-medium text-gray-700 mb-1">Target major</label>
-            <input
-              id="targetMajor"
-              type="text"
-              placeholder="e.g., Computer & Information Science"
-              value={form.targetMajor}
-              onChange={onChange("targetMajor")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
-          <div className="mb-3">
-            <label htmlFor="targetMinor" className="block text-sm font-medium text-gray-700 mb-1">Target minor (optional)</label>
-            <input
-              id="targetMinor"
-              type="text"
-              placeholder="e.g., Mathematics"
-              value={form.targetMinor}
-              onChange={onChange("targetMinor")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
-          <div className="mb-3">
-            <label htmlFor="planName" className="block text-sm font-medium text-gray-700 mb-1">Plan name</label>
-            <input
-              id="planName"
-              type="text"
-              placeholder='e.g., "BS CIS 2023-2024"'
-              value={form.planName}
-              onChange={onChange("planName")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
-          <div className="mb-3">
-            <label htmlFor="preferredElectives" className="block text-sm font-medium text-gray-700 mb-1">Preferred electives (comma-separated)</label>
-            <input
-              id="preferredElectives"
-              type="text"
-              placeholder='e.g., AI, Data Science, Systems'
-              value={form.preferredElectives}
-              onChange={onChange("preferredElectives")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            />
-          </div>
-
-          <fieldset className="border border-gray-200 rounded-lg p-3 mt-2">
-            <legend className="text-sm font-medium text-gray-700 px-1.5">Constraints</legend>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="mb-3">
-                <label htmlFor="maxCreditHour" className="block text-sm font-medium text-gray-700 mb-1">Max credit hours</label>
-                <input
-                  id="maxCreditHour"
-                  type="number"
-                  min={1}
-                  max={30}
-                  placeholder="e.g., 18"
-                  value={form.maxCreditHour === "" ? "" : form.maxCreditHour}
-                  onChange={onChange("maxCreditHour")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                />
-              </div>
-              <div className="mb-3">
-                <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
-                <input
-                  id="semester"
-                  type="text"
-                  placeholder='e.g., "Spring 2026"'
-                  value={form.semester}
-                  onChange={onChange("semester")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                />
-              </div>
-            </div>
-          </fieldset>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="mb-3">
-              <label htmlFor="gpa" className="block text-sm font-medium text-gray-700 mb-1">GPA</label>
-              <input
-                id="gpa"
-                type="number"
-                min={0}
-                max={4}
-                step={0.01}
-                placeholder="e.g., 3.7"
-                value={form.gpa === "" ? "" : form.gpa}
-                onChange={onChange("gpa")}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-            <div />
-          </div>
-
-          <div className="flex gap-3 pt-3 items-center">
-            <button
-              type="button"
-              onClick={submit}
-              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            ) : (
+              <img src="/icon.svg" alt="CourseGuide" className="size-10 rounded-md" />
+            )
+          }
+          fab={
+            <md-fab
+              variant="primary"
+              label={railExpanded ? fabLabel : ""}
+              aria-label={fabLabel}
+              title={fabLabel}
+              onClick={onGenerate}
+              lowered
             >
-              Get Recommendations
-            </button>
-            <a
-              href="/api/health"
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-600 underline"
-            >
-              Health
-            </a>
+              <md-icon slot="icon">{s.running ? "hourglass_top" : "auto_awesome"}</md-icon>
+            </md-fab>
+          }
+        />
+      )}
+
+      <div className={compact ? "" : railExpanded ? "pl-[260px]" : "pl-24"}>
+        <TopAppBar title={title} scrolled={scrolled} trailing={caseChip} />
+        <main
+          className="mx-auto w-full max-w-[1280px] px-[var(--app-margin)] pt-2"
+          style={{
+            paddingBottom: compact
+              ? `calc(var(--app-nav-bar-height) + env(safe-area-inset-bottom) + ${showCompactFab ? 96 : 24}px)`
+              : "32px",
+          }}
+        >
+          <div key={dest} className="page-enter">
+            {page}
           </div>
-          {status && <p className="text-sm text-gray-500 mt-2">{status}</p>}
-        </section>
-
-        {/* Terminal Display - Add this before recommendations section */}
-        {terminalLogs.length > 0 && (
-          <section className="mt-6 p-4 bg-gray-900 rounded-lg shadow-lg font-mono text-sm text-left">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-700">
-              <h3 className="text-green-400 font-semibold flex items-center gap-2">
-                🖥️ Processing Terminal
-                {(isAnalyzing || status === "Loading...") && (
-                  <span className="text-yellow-300">
-                    <Spinner />
-                  </span>
-                )}
-              </h3>
-              <button
-                onClick={() => setTerminalLogs([])}
-                className="text-xs text-gray-400 hover:text-white"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="max-h-64 overflow-y-auto text-green-300 space-y-1">
-              {terminalLogs.map((log, idx) => (
-                <div key={idx} className="whitespace-pre-wrap">
-                  {log}
-                </div>
-              ))}
-              {isAnalyzing && (
-                <div className="text-yellow-300">
-                  <Spinner /> Analyzing with LLM... This may take a moment...
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        <section className="mt-6">
-          <h2 className="text-xl font-semibold mb-2">Recommendations</h2>
-          <ul className="list-disc pl-5">
-            {results.map((item, idx) => (
-              <li key={idx}>{item}</li>
-            ))}
-          </ul>
-        </section>
-
-        {selected.length > 0 && (
-          <section className="mt-6 p-4 bg-white shadow rounded">
-            <h2 className="text-xl font-semibold mb-2">Selected Courses (max 6)</h2>
-            <p className="text-sm text-gray-600 mb-2">Total Credits: {totalCredits}</p>
-            {importErrors.length > 0 && (
-              <div className="mb-3">
-                <ul className="list-disc ml-5 text-sm text-red-700">
-                  {importErrors.map((e, i) => <li key={i}>{e}</li>)}
-                </ul>
-              </div>
-            )}
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b">
-                    <th className="py-2 pr-4">Course</th>
-                    <th className="py-2 pr-4">Credits</th>
-                    <th className="py-2 pr-4">Category</th>
-                    <th className="py-2 pr-4">Prerequisites</th>
-                    <th className="py-2 pr-4">Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.map((c, i) => (
-                    <tr key={i} className="border-b">
-                      <td className="py-2 pr-4 font-medium">{c.courseName}</td>
-                      <td className="py-2 pr-4">{c.creditHours}</td>
-                      <td className="py-2 pr-4">{c.category}</td>
-                      <td className="py-2 pr-4">{c.prerequisites?.join(", ") || "—"}</td>
-                      <td className="py-2 pr-4">{c.description || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
+        </main>
       </div>
-      {showSettings && <SettingsModal />}
-      {showCaseModal && <CaseModal />}
-      {showSyncConfirm && <SyncConfirmModal />}
+
+      {showCompactFab && (
+        <div
+          className="fixed right-4 z-30"
+          style={{ bottom: "calc(var(--app-nav-bar-height) + env(safe-area-inset-bottom) + 16px)" }}
+        >
+          <md-fab variant="primary" label={fabExtended ? fabLabel : ""} aria-label={fabLabel} onClick={onGenerate}>
+            <md-icon slot="icon">{s.running ? "hourglass_top" : "auto_awesome"}</md-icon>
+          </md-fab>
+        </div>
+      )}
+
+      {compact && <NavigationBar destinations={destinations} active={dest} onSelect={navigate} />}
+
+      <Dialog
+        open={s.syncDialogOpen}
+        onClose={() => s.setSyncDialogOpen(false)}
+        icon="cloud_sync"
+        headline="Sync to online storage?"
+        actions={
+          <>
+            <md-text-button onClick={() => s.setSyncDialogOpen(false)}>Not now</md-text-button>
+            <md-text-button onClick={s.syncNow} disabled={s.busy === "sync"}>
+              {s.busy === "sync" ? "Syncing…" : "Sync"}
+            </md-text-button>
+          </>
+        }
+      >
+        You have {s.syncStatus?.unsyncedCount ?? 0} local {s.syncStatus?.unsyncedCount === 1 ? "record" : "records"} that
+        aren't in Supabase yet. Syncing uploads them; local copies are kept.
+      </Dialog>
     </div>
   )
 }
