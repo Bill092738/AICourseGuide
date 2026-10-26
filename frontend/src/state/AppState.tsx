@@ -102,7 +102,7 @@ function toNum(v: unknown): number | "" {
 }
 
 /** Accepts form JSON saved by this app or by the previous frontend. */
-function parseSavedForm(raw: string): FormState {
+export function parseSavedForm(raw: string): FormState {
   const p = JSON.parse(raw) as Record<string, unknown>
   const str = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : "")
   const level = str("degreeLevel")
