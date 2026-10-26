@@ -15,7 +15,7 @@
 | Member | GitHub |
 | :---: | :---: |
 | Bill Zhao | [`Bill092738`](https://github.com/Bill092738) |
-| Jasminwzq | [`Jasminwzq`](https://github.com/Jasminwzq) |
+| Jasmine Wang | [`Jasminwzq`](https://github.com/Jasminwzq) |
 
 ---
 
