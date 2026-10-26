@@ -2,8 +2,8 @@
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_DIR="$PROJECT_DIR/CourseGuide"
-FRONTEND_DIR="$PROJECT_DIR/CourseGuide/frontend"
+BACKEND_DIR="$PROJECT_DIR/backend"
+FRONTEND_DIR="$PROJECT_DIR/frontend"
 BACKEND_PORT=8080
 FRONTEND_PORT=5173
 
