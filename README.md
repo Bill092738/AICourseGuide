@@ -19,6 +19,7 @@ CourseGuide builds a next-semester course plan from your university's published 
 - [API reference](#api-reference)
 - [Project structure](#project-structure)
 - [Development](#development)
+- [Testing and CI](#testing-and-ci)
 - [Further documentation](#further-documentation)
 
 ---
@@ -68,7 +69,7 @@ flowchart LR
 
 | Layer | Responsibility |
 | --- | --- |
-| **Frontend** (`CourseGuide/frontend`) | Collects the student profile, uploads the progress PDF, runs the generate flow, shows selected courses, and manages saved sessions and settings. LLM settings live in the browser and are sent with each request. |
+| **Frontend** (`frontend/`) | Collects the student profile, uploads the progress PDF, runs the generate flow, shows selected courses, and manages saved sessions and settings. LLM settings live in the browser and are sent with each request. |
 | **Controllers** (`controllers/`) | Thin REST layer that coordinates the services. |
 | **Services** (`services/`) | Web search, page-to-PDF rendering, PDF text extraction, LLM prompting, XML import, course selection, file storage, and progress persistence. |
 | **MySQL** | Course and prerequisite tables for the dependency graph, plus saved sessions. Tables are created automatically on first use. |
@@ -121,6 +122,7 @@ sequenceDiagram
 | Scraping and PDFs | Playwright for Java, jsoup, Apache PDFBox |
 | Data | MySQL 8 (HikariCP), optional Supabase |
 | AI | Any OpenAI-compatible chat completions API |
+| Testing and CI | JUnit 5, Mockito, AssertJ, H2 · Vitest, Testing Library, jsdom · GitHub Actions |
 
 ---
 
@@ -164,12 +166,12 @@ The script checks the prerequisites, builds and starts the backend, installs fro
 
 ```sh
 # Backend
-cd CourseGuide
+cd backend
 mvn clean package
 java -jar target/courseguide-0.1.0-SNAPSHOT.jar
 
 # Frontend (in another terminal)
-cd CourseGuide/frontend
+cd frontend
 npm install
 npm run dev
 ```
@@ -192,7 +194,7 @@ Set this in the app under **Settings → LLM API**. The values are stored in the
 
 ### Backend
 
-Settings live in [`CourseGuide/src/main/resources/application.properties`](CourseGuide/src/main/resources/application.properties). Any property can be overridden with an environment variable, using Spring Boot's naming (for example, `spring.datasource.password` becomes `SPRING_DATASOURCE_PASSWORD`).
+Settings live in [`backend/src/main/resources/application.properties`](backend/src/main/resources/application.properties). Any property can be overridden with an environment variable, using Spring Boot's naming (for example, `spring.datasource.password` becomes `SPRING_DATASOURCE_PASSWORD`).
 
 | Property | Purpose | Default |
 | --- | --- | --- |
@@ -247,47 +249,75 @@ All endpoints are under `/api` and use JSON unless noted.
 
 ```
 AICourseGuide/
-├── start.sh                         # One-command build and run
-└── CourseGuide/
-    ├── pom.xml
-    ├── src/main/java/com/courseguide/
-    │   ├── App.java                 # Spring Boot entry point
-    │   ├── WebCorsConfig.java
-    │   ├── controllers/             # Recommendation, FileUpload, CourseSelection, Progress, Snapshot
-    │   ├── services/                # Search, PDF render/extract, LLM, XML import, selection, storage, progress, Supabase
-    │   ├── processors/              # Recommendation engine and data processors
-    │   ├── dto/                     # Request records (StudentProfile, LlmConfig, ...)
-    │   ├── models/
-    │   └── utils/
-    ├── src/main/resources/
-    │   ├── application.properties
-    │   └── sql/                     # Schema, sample data, and DAG queries
-    ├── frontend/
-    │   ├── index.html
-    │   ├── vite.config.ts           # Dev server and /api proxy
-    │   └── src/
-    │       ├── App.tsx              # Adaptive shell: navigation bar/rail, app bar, FAB
-    │       ├── pages/               # Plan, Results, Saved, Settings
-    │       ├── components/          # Material 3 components and wrappers
-    │       ├── state/AppState.tsx   # App state and backend calls
-    │       ├── lib/api.ts           # Typed API client
-    │       └── theme/theme.ts       # Dynamic color
-    ├── uploads/                     # Uploaded progress PDFs (generated)
-    ├── snapshots/                   # Rendered requirements PDFs (generated)
-    └── course-plans/                # LLM-generated course plans (generated)
+├── .github/workflows/ci.yml          # GitHub Actions: backend and frontend jobs
+├── start.sh                          # One-command build and run
+├── backend/                          # Spring Boot service (Maven)
+│   ├── pom.xml
+│   └── src/
+│       ├── main/java/com/courseguide/
+│       │   ├── App.java              # Entry point
+│       │   ├── config/               # CORS
+│       │   ├── controllers/          # REST endpoints
+│       │   ├── services/             # Search, PDF render/extract, LLM, XML import, selection, storage, progress, Supabase
+│       │   ├── processors/           # Recommendation engine and data processors
+│       │   ├── dto/                  # Request records (StudentProfile, LlmConfig, ...)
+│       │   ├── models/
+│       │   └── utils/                # XML and CSV parsing
+│       ├── main/resources/
+│       │   ├── application.properties
+│       │   └── sql/                  # Schema, sample data, and DAG queries
+│       └── test/java/com/courseguide/ # JUnit 5 tests, mirroring main/
+├── frontend/                         # React + Vite app
+│   ├── vite.config.ts                # Dev server and /api proxy
+│   ├── vitest.config.ts
+│   └── src/
+│       ├── App.tsx                   # Adaptive shell: navigation bar/rail, app bar, FAB
+│       ├── pages/                    # Plan, Results, Saved, Settings
+│       ├── components/               # Material 3 components and wrappers
+│       ├── state/AppState.tsx        # App state and backend calls
+│       ├── lib/api.ts                # Typed API client
+│       ├── theme/theme.ts            # Dynamic color
+│       └── **/*.test.ts(x)           # Vitest tests next to the code they cover
+└── docs/                             # MySQL DAG and CSV format notes
 ```
+
+At runtime the backend writes `uploads/`, `snapshots/`, and `course-plans/` into its working directory (`backend/` when started with `start.sh`). These folders are git-ignored.
 
 ---
 
 ## Development
 
 ```sh
-cd CourseGuide/frontend
+# Frontend
+cd frontend
 npm run lint      # ESLint
+npm test          # Vitest unit tests
 npm run build     # Type-check and production build
+
+# Backend
+cd backend
+mvn verify        # Compile and run unit tests
 ```
 
-See [`CourseGuide/frontend/README.md`](CourseGuide/frontend/README.md) for how the frontend applies Material 3: tokens, breakpoints, and components.
+See [`frontend/README.md`](frontend/README.md) for how the frontend applies Material 3: tokens, breakpoints, and components.
+
+---
+
+## Testing and CI
+
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on pushes to `main`. The two jobs run in parallel:
+
+| Job | Steps |
+| --- | --- |
+| Backend | JDK 21 (Temurin) → `mvn -B verify` |
+| Frontend | Node 22 → `npm ci` → `npm run lint` → `npm test` → `npm run build` |
+
+The tests need no external services:
+
+- **Backend** (JUnit 5, Mockito, AssertJ). Database code runs against in-memory H2 in MySQL mode, controllers are tested with `@WebMvcTest` and mocked services, and Supabase calls go to `MockRestServiceServer`. Nothing calls MySQL, the LLM, DuckDuckGo, or Playwright. Tests run in `backend/target/test-work` so generated files stay out of the source tree.
+- **Frontend** (Vitest, jsdom, Testing Library). Covers the API client, form validation, saved-form parsing, dynamic color, breakpoints, UI components, and the generate/save/load flows with a mocked `fetch`.
+
+Tests marked `@Disabled` describe known bugs. Remove the annotation once the bug is fixed.
 
 ---
 
@@ -295,8 +325,8 @@ See [`CourseGuide/frontend/README.md`](CourseGuide/frontend/README.md) for how t
 
 | Document | Topic |
 | --- | --- |
-| [`README_MySQL_DAG.md`](CourseGuide/README_MySQL_DAG.md) | MySQL prerequisite graph setup |
-| [`DAG_SOLUTION_README.md`](CourseGuide/DAG_SOLUTION_README.md) | Graph generation approach |
-| [`PURE_MYSQL_DAG_SOLUTION.md`](CourseGuide/PURE_MYSQL_DAG_SOLUTION.md) | SQL-only graph solution |
-| [`GENERIC_MYSQL_DAG_SOLUTION.md`](CourseGuide/GENERIC_MYSQL_DAG_SOLUTION.md) | Generic graph queries |
-| [`CSV_FORMAT_DOCUMENTATION.md`](CourseGuide/CSV_FORMAT_DOCUMENTATION.md) | Legacy CSV course plan format |
+| [`README_MySQL_DAG.md`](docs/README_MySQL_DAG.md) | MySQL prerequisite graph setup |
+| [`DAG_SOLUTION_README.md`](docs/DAG_SOLUTION_README.md) | Graph generation approach |
+| [`PURE_MYSQL_DAG_SOLUTION.md`](docs/PURE_MYSQL_DAG_SOLUTION.md) | SQL-only graph solution |
+| [`GENERIC_MYSQL_DAG_SOLUTION.md`](docs/GENERIC_MYSQL_DAG_SOLUTION.md) | Generic graph queries |
+| [`CSV_FORMAT_DOCUMENTATION.md`](docs/CSV_FORMAT_DOCUMENTATION.md) | Legacy CSV course plan format |

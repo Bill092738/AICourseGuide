@@ -9,6 +9,7 @@ npm install
 npm run dev     # http://localhost:5173, proxies /api to the backend on :8080
 npm run build   # type-check and production build
 npm run lint
+npm test        # Vitest unit tests (jsdom)
 ```
 
 ## How Material 3 is applied
