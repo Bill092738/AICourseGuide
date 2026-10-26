@@ -60,7 +60,7 @@ done
 
 # --- Install frontend dependencies ---
 cd "$FRONTEND_DIR"
-if [ ! -d "node_modules" ]; then
+if [ ! -d "node_modules" ] || [ "package-lock.json" -nt "node_modules/.package-lock.json" ]; then
   info "Installing frontend dependencies..."
   npm install --silent
 fi
